@@ -50,9 +50,14 @@ class Entry:
 def decode(raw: bytes) -> Any:
     text = raw.decode("utf-8", errors="replace")
     try:
-        return json.loads(text)
+        payload = json.loads(text)
     except ValueError:
         return text
+    # An inline image (a vision trial) can be megabytes: it is not kept in memory nor
+    # sent to every browser. Only its size stays, so the message still says it had one.
+    if isinstance(payload, dict) and isinstance(payload.get("image_b64"), str):
+        payload["image_b64_bytes"] = len(payload.pop("image_b64")) * 3 // 4
+    return payload
 
 
 @dataclass
@@ -149,8 +154,8 @@ def connect(
     client_id: str = "plant-console",
 ):
     """Subscribes ``<site>/#`` (and the broker's ``$SYS`` statistics) and feeds ``live``.
-    Returns the client, already looping. Its user can only read, plus the two demo
-    requests the console makes (see the broker's ACL)."""
+    Returns the client, already looping. Its user can only read, plus the rule,
+    disturbance and isolated vision-trial requests (see the broker's ACL)."""
     import paho.mqtt.client as mqtt
 
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=client_id)

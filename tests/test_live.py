@@ -70,3 +70,12 @@ def test_an_empty_retained_message_deletes_the_topic():
     live.add("planta1/a", payload(1), retained=True)
     live.add("planta1/a", b"", retained=True)
     assert "planta1/a" not in live.snapshot()["topics"]
+
+
+def test_an_inline_image_is_not_kept_nor_sent_to_browsers():
+    live = Live()
+    live.add("planta1/ensayos/vision/foto", payload("nueva-1", image_b64="A" * 4000, mime="image/png"))
+    kept = live.last("planta1/ensayos/vision/foto").payload
+    assert "image_b64" not in kept
+    assert kept["image_b64_bytes"] == 3000 and kept["mime"] == "image/png"
+    assert "AAAA" not in json.dumps(live.snapshot())

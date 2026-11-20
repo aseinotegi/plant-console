@@ -1,3 +1,4 @@
+import base64
 import json
 
 import httpx
@@ -20,7 +21,13 @@ def fake_robot(request: httpx.Request) -> httpx.Response:
     if request.url.path == "/planta":
         return httpx.Response(200, json={"nombre": "Planta 1", "ruta": [[0, 0], [1, 0]]})
     if request.url.path == "/fotos":
-        return httpx.Response(200, json={"pi-610_21.0.jpg": {"autor": "X", "licencia": "CC BY 2.0"}})
+        return httpx.Response(
+            200,
+            json={
+                "pi-610_21.0.jpg": {"autor": "X", "licencia": "CC BY 2.0", "poi": "PI-610"},
+                "pi-104_4.25.jpg": {"autor": "generada", "licencia": "MIT", "poi": "PI-104"},
+            },
+        )
     if request.url.path == "/fotos/pi-104_4.25.jpg":
         return httpx.Response(200, content=b"\xff\xd8jpeg", headers={"content-type": "image/jpeg"})
     return httpx.Response(404, json={})
@@ -47,6 +54,20 @@ class Plant:
         elif topic == "planta1/simulacion/perturbacion":
             result = {"value": "en-marcha", "request": request}
             self.live.add(f"{topic}/resultado", json.dumps(result).encode())
+        elif topic == "planta1/ensayos/vision/foto":
+            status = {"value": "analizando", "state": "analizando", "request": request}
+            self.live.add("planta1/ensayos/vision/estado", json.dumps(status).encode())
+            result = {
+                "value": 4.25,
+                "state": "completada",
+                "quality": "good",
+                "mode": "ensayo",
+                "request": request,
+                "poi": payload["poi"],
+                "image": payload["value"],
+                "inspection_id": "trial-inspection",
+            }
+            self.live.add("planta1/ensayos/vision/resultado", json.dumps(result).encode())
 
 
 @pytest.fixture
@@ -121,6 +142,72 @@ def test_the_disturbance_button_goes_through_the_uns(setup):
     response = client.post("/api/escenario/perturbacion")
     assert response.status_code == 200 and response.json()["estado"] == "en-marcha"
     assert plant.sent[-1][0] == "planta1/simulacion/perturbacion"
+
+
+def configure_vision(live):
+    config = {"pois": {"PI-104": {"uns_topic": "planta1/exterior/pi-104/presion"}}}
+    live.add("planta1/servicios/inspector/config", json.dumps(config).encode(), retained=True)
+
+
+def test_a_catalog_photo_can_be_analyzed_as_an_isolated_trial(setup):
+    client, live, plant = setup
+    configure_vision(live)
+    response = client.post(
+        "/api/vision/ensayos",
+        json={"poi": "PI-104", "file": "pi-104_4.25.jpg", "request": "visitor-request-001"},
+    )
+    assert response.status_code == 200 and response.json()["ok"] is True
+    result = response.json()["result"]
+    assert result["state"] == "completada" and result["mode"] == "ensayo"
+    assert result["request"] == "visitor-request-001"
+    topic, payload = plant.sent[-1]
+    assert topic == "planta1/ensayos/vision/foto" and payload["image_file"] == "pi-104_4.25.jpg"
+    assert payload["request"] == result["request"] and payload["mode"] == "ensayo"
+    assert base64.b64decode(payload["image_b64"]) == b"\xff\xd8jpeg"
+
+
+def test_a_new_image_is_validated_and_sent_as_base64(setup):
+    client, live, plant = setup
+    configure_vision(live)
+    image = base64.b64encode(b"\xff\xd8new-photo").decode()
+    response = client.post(
+        "/api/vision/ensayos", json={"poi": "PI-104", "image_b64": image, "mime": "image/jpeg"}
+    )
+    assert response.status_code == 200 and response.json()["ok"] is True
+    topic, payload = plant.sent[-1]
+    assert topic == "planta1/ensayos/vision/foto" and payload["value"].startswith("nueva-")
+    assert "image_file" not in payload and base64.b64decode(payload["image_b64"]) == b"\xff\xd8new-photo"
+
+
+def test_vision_trials_refuse_unknown_pois_mismatched_files_and_invalid_images(setup):
+    client, live, plant = setup
+    configure_vision(live)
+    assert client.post("/api/vision/ensayos", json={"poi": "PI-999", "file": "x.jpg"}).status_code == 400
+    mismatch = client.post("/api/vision/ensayos", json={"poi": "PI-104", "file": "pi-610_21.0.jpg"})
+    assert mismatch.status_code == 400
+    invalid = client.post(
+        "/api/vision/ensayos", json={"poi": "PI-104", "image_b64": "not base64", "mime": "image/jpeg"}
+    )
+    assert invalid.status_code == 400
+    wrong_content = client.post(
+        "/api/vision/ensayos",
+        json={"poi": "PI-104", "image_b64": base64.b64encode(b"text").decode(), "mime": "image/jpeg"},
+    )
+    assert wrong_content.status_code == 400
+    assert len(plant.sent) == 0
+
+
+def test_a_vision_trial_without_an_answer_is_not_a_success():
+    nobody = lambda topic, payload: None  # noqa: E731
+    live = Live()
+    configure_vision(live)
+    app = create_app(Settings({}), live, publish=nobody, mqtt=False, vision_timeout_s=0.2)
+    with TestClient(app) as client:
+        image = base64.b64encode(b"\xff\xd8new-photo").decode()
+        response = client.post(
+            "/api/vision/ensayos", json={"poi": "PI-104", "image_b64": image, "mime": "image/jpeg"}
+        )
+    assert response.status_code == 504 and response.json()["ok"] is False
 
 
 def test_scenario_comes_from_the_uns(setup):

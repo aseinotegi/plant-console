@@ -43,12 +43,12 @@ export type Tone = "ok" | "warn" | "bad" | "idle";
 
 export function qualityTone(q: unknown): Tone {
   if (q === "good") return "ok";
-  if (q === "uncertain") return "warn";
-  if (q === "rejected") return "bad";
+  if (q === "uncertain" || q === "stale") return "warn";
+  if (q === "rejected" || q === "error") return "bad";
   return "idle";
 }
 
-const QUALITY: Record<string, string> = { good: "fiable", uncertain: "dudosa", rejected: "rechazada" };
+const QUALITY: Record<string, string> = { good: "fiable", uncertain: "dudosa", rejected: "rechazada", stale: "caducada", error: "error" };
 export const qualityLabel = (q: unknown) => (typeof q === "string" ? (QUALITY[q] ?? q) : "—");
 
 const REASON: Record<string, string> = {

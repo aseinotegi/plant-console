@@ -9,19 +9,23 @@ Everything it shows comes from the UNS (MQTT) or from the robot's own server:
 * ``/api/historia``: recent values of a numeric topic, for the trends.
 * ``/api/reglas``: the rules the engine is running; PUT sends new ones to the engine,
   which validates them and answers. The console never writes a file.
+* ``/api/vision/ensayos``: analyze a catalog photo or a new image in the isolated
+  trial branch; it never writes a plant value or order.
 * ``/api/escenario/perturbacion``: the demo's disturbance button, through the UNS.
 * ``/api/servicios``: health of every container, checked from the console's networks.
 * ``/``: the web app, when it has been built into ``WEB_DIR``.
 
-The console's MQTT user can only read, plus those two requests (broker ACL): it
-cannot send an order to the plant. Configuration is environment only: MQTT_HOST,
-MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD, SITE, ROBOT_URL, GRAFANA_URL, WEB_DIR,
-STREAM_TOPICS, SERVICES_FILE.
+The console's MQTT user can only read, plus rules, disturbance and trial requests
+(broker ACL): it cannot send an order to the plant. Configuration is environment
+only: MQTT_HOST, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD, SITE, ROBOT_URL,
+GRAFANA_URL, WEB_DIR, STREAM_TOPICS, SERVICES_FILE.
 """
 
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import json
 import logging
 import os
@@ -29,6 +33,7 @@ import re
 import time
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -44,6 +49,8 @@ from .services import check_all, load_services
 log = logging.getLogger("console")
 
 PHOTO_NAME = re.compile(r"^[a-z0-9_.-]+\.jpe?g$")
+MAX_IMAGE_BYTES = 8 * 1024 * 1024
+IMAGE_MIME = {"image/jpeg", "image/png"}
 
 
 class Settings:
@@ -81,6 +88,10 @@ class Settings:
     def disturb_topic(self) -> str:
         return f"{self.site}/simulacion/perturbacion"
 
+    @property
+    def vision_trial_topic(self) -> str:
+        return f"{self.site}/ensayos/vision"
+
 
 class Publisher(Protocol):
     def __call__(self, topic: str, payload: dict[str, Any]) -> None: ...
@@ -88,6 +99,14 @@ class Publisher(Protocol):
 
 class RulesBody(BaseModel):
     rules: list[dict[str, Any]]
+
+
+class VisionTrialBody(BaseModel):
+    poi: str
+    file: str | None = None
+    image_b64: str | None = None
+    mime: str | None = None
+    request: str | None = None
 
 
 async def answer(live: Live, topic: str, request: str, timeout_s: float) -> dict[str, Any] | None:
@@ -107,6 +126,7 @@ def create_app(
     publish: Publisher | None = None,
     mqtt: bool = True,
     answer_timeout_s: float = 6.0,
+    vision_timeout_s: float = 180.0,
 ) -> FastAPI:
     settings = settings or Settings()
     live = live or Live(streams=settings.streams)
@@ -195,6 +215,82 @@ def create_app(
             media_type=response.headers.get("content-type", "image/jpeg"),
             headers={"Cache-Control": "max-age=3600"},  # a photo never changes
         )
+
+    @app.post("/api/vision/ensayos")
+    async def vision_trial(body: VisionTrialBody, request: Request) -> Any:
+        if bool(body.file) == bool(body.image_b64):
+            raise HTTPException(400, "indica una foto del catálogo o una imagen nueva, no ambas")
+        config_entry = live.last(f"{settings.site}/servicios/inspector/config")
+        config = config_entry.payload if config_entry and isinstance(config_entry.payload, dict) else {}
+        if body.poi not in config.get("pois", {}):
+            raise HTTPException(400, "el inspector no tiene configurado ese punto de interés")
+
+        if body.request and not re.fullmatch(r"[a-zA-Z0-9-]{8,64}", body.request):
+            raise HTTPException(400, "el identificador de solicitud no es válido")
+        request_id = body.request or uuid.uuid4().hex
+        if body.file:
+            if not PHOTO_NAME.match(body.file):
+                raise HTTPException(400, "nombre de imagen no válido")
+            credits_response = await robot(request, "/fotos")
+            if credits_response.status_code != 200:
+                raise HTTPException(502, "el robot no da los créditos de las fotos")
+            credit = credits_response.json().get(body.file)
+            if credit is None:
+                raise HTTPException(404, "la foto no está en el catálogo")
+            if credit.get("poi") != body.poi:
+                raise HTTPException(400, "la foto no pertenece al punto de interés indicado")
+            photo_response = await robot(request, f"/fotos/{body.file}")
+            if photo_response.status_code != 200:
+                raise HTTPException(502, "el robot no puede recuperar la foto")
+            image = photo_response.content
+            mime = photo_response.headers.get("content-type", "image/jpeg").split(";")[0]
+            image_id = body.file
+            image_file = body.file
+        else:
+            mime = body.mime or ""
+            if mime not in IMAGE_MIME:
+                raise HTTPException(415, "solo se admiten imágenes JPEG o PNG")
+            assert body.image_b64 is not None
+            if len(body.image_b64) > (MAX_IMAGE_BYTES * 4 // 3) + 4:
+                raise HTTPException(413, "la imagen supera el límite de 8 MiB")
+            try:
+                image = base64.b64decode(body.image_b64, validate=True)
+            except binascii.Error:
+                raise HTTPException(400, "la imagen no es base64 válido") from None
+            image_id = f"nueva-{request_id[:12]}"
+            image_file = None
+
+        if len(image) > MAX_IMAGE_BYTES:
+            raise HTTPException(413, "la imagen supera el límite de 8 MiB")
+        if mime not in IMAGE_MIME:
+            raise HTTPException(415, "solo se admiten imágenes JPEG o PNG")
+        if mime == "image/jpeg" and not image.startswith(b"\xff\xd8"):
+            raise HTTPException(400, "el contenido no es una imagen JPEG")
+        if mime == "image/png" and not image.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise HTTPException(400, "el contenido no es una imagen PNG")
+
+        captured = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        payload = {
+            "value": image_id,
+            "poi": body.poi,
+            "image_b64": base64.b64encode(image).decode(),
+            "mime": mime,
+            "ts": captured,
+            "captured_at": captured,
+            "source": "console",
+            "mode": "ensayo",
+            "request": request_id,
+        }
+        if image_file:
+            payload["image_file"] = image_file
+        send(f"{settings.vision_trial_topic}/foto", payload)
+        result = await answer(live, f"{settings.vision_trial_topic}/resultado", request_id, vision_timeout_s)
+        if result is None:
+            return JSONResponse(
+                {"ok": False, "detail": "el inspector no ha contestado", "request": request_id},
+                status_code=504,
+            )
+        return {"ok": result.get("state") == "completada", "result": result}
 
     @app.get("/api/escenario")
     def escenario() -> Any:

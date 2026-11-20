@@ -6,6 +6,15 @@ import { useSyncExternalStore } from "react";
 
 export type Payload = { value?: unknown; [key: string]: unknown };
 
+export interface PhotoCredit {
+  autor: string;
+  licencia: string;
+  fuente: string;
+  poi: string;
+  valor: string;
+  condicion: string;
+}
+
 export interface Entry {
   topic: string;
   payload: Payload | string;
@@ -68,7 +77,7 @@ class LiveStore {
   socket = false;
   broker = false;
   grafanaUrl = "";
-  credits: Record<string, { autor: string; licencia: string; fuente: string; poi: string; valor: string; condicion: string }> = {};
+  credits: Record<string, PhotoCredit> = {};
   rate = 0; // messages per second
   version = 0;
 
