@@ -42,7 +42,7 @@ export function summary(entry: Entry | undefined): string {
   if (!entry) return "—";
   if (typeof entry.payload === "string") return entry.payload;
   const p = entry.payload;
-  if ("value" in p) return typeof p.value === "object" ? JSON.stringify(p.value) : String(p.value);
+  if ("value" in p) return p.value === null ? "—" : typeof p.value === "object" ? JSON.stringify(p.value) : String(p.value);
   return Object.entries(p)
     .filter(([k, v]) => k !== "ts" && (typeof v !== "object" || v === null))
     .slice(0, 3)
@@ -63,11 +63,12 @@ class LiveStore {
   trends = new Map<string, [number, number][]>();
   photos = new Map<string, string>(); // image id → photo URL, from the robot's photo messages
   raw: Entry[] = []; // every message as it arrives, for the MQTT terminal
+  inspections: Entry[] = []; // every inspection since the console started, for the analytics
   trail: [number, number][] = []; // the robot's last positions
   socket = false;
   broker = false;
   grafanaUrl = "";
-  credits: Record<string, { autor: string; licencia: string; fuente: string }> = {};
+  credits: Record<string, { autor: string; licencia: string; fuente: string; poi: string; valor: string; condicion: string }> = {};
   rate = 0; // messages per second
   version = 0;
 
@@ -129,6 +130,7 @@ class LiveStore {
         this.events = data.events as Entry[];
         this.broker = data.connected === true;
         for (const e of this.events) this.notePhoto(e);
+        this.inspections = this.events.filter((e) => e.topic.endsWith("/inspeccion"));
         for (const e of this.topics.values()) {
           this.notePhoto(e);
           this.addPoint(e);
@@ -141,6 +143,10 @@ class LiveStore {
         if (entry.topic.endsWith("/posicion")) this.addTrail(entry);
         this.addPoint(entry);
         this.notePhoto(entry);
+        if (data.event && entry.topic.endsWith("/inspeccion")) {
+          this.inspections.push(entry);
+          if (this.inspections.length > 2000) this.inspections.shift();
+        }
         if (data.event) {
           this.events.push(entry);
           if (this.events.length > MAX_EVENTS) this.events.splice(0, this.events.length - MAX_EVENTS);

@@ -20,8 +20,10 @@ const PAGES = [
   { path: "mqtt", label: "MQTT en vivo", page: MqttPage },
   { path: "historico", label: "Histórico", page: HistoryPage },
   { path: "arquitectura", label: "Arquitectura", page: ArchitecturePage },
-  { path: "ciber", label: "Ciberseguridad", page: SecurityPage },
 ];
+
+// Not in the menu for now, still reachable at #/ciber
+const HIDDEN = [{ path: "ciber", label: "Ciberseguridad", page: SecurityPage }];
 
 function useRoute(): string {
   const read = () => location.hash.replace(/^#\/?/, "");
@@ -37,7 +39,7 @@ function useRoute(): string {
 export function App() {
   const route = useRoute();
   const live = useLive();
-  const current = PAGES.find((p) => p.path === route) ?? PAGES[0];
+  const current = [...PAGES, ...HIDDEN].find((p) => p.path === route) ?? PAGES[0];
   const Page = current.page;
   return (
     <>
@@ -65,11 +67,6 @@ export function App() {
       <main>
         <Page />
       </main>
-      <footer className="foot">
-        Demo de <a href="https://andersein.com">Ander Sein</a>: datos simulados, sin ningún dato de cliente. Código en{" "}
-        <a href="https://github.com/aseinotegi/industrial-uns-demo">industrial-uns-demo</a> y{" "}
-        <a href="https://github.com/aseinotegi/plant-console">plant-console</a>.
-      </footer>
     </>
   );
 }

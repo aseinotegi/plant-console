@@ -45,9 +45,6 @@ export function MqttPage() {
     <div className="mqtt-page">
       <header className="panel-head">
         <h1>MQTT en vivo</h1>
-        <p className="muted">
-          Todo lo que pasa por el broker, tal cual llega. La consola entra con un usuario que solo puede leer; para ver lo mismo desde tu PC, MQTT Explorer o mosquitto_sub contra localhost:1883 con el usuario de solo lectura <code>explorer</code>.
-        </p>
       </header>
       <div className="broker-stats">
         <Stat label="Clientes conectados" value={sys(live, "clients/connected")} />
@@ -64,7 +61,7 @@ export function MqttPage() {
             <input value={filter} onChange={(e) => setFilter(e.target.value)} spellCheck={false} aria-label="Filtro de temas MQTT, admite + y #" />
           </label>
           <label className="check">
-            <input type="checkbox" checked={hideFast} onChange={(e) => setHideFast(e.target.checked)} /> Ocultar señales rápidas (posición del robot, PLC)
+            <input type="checkbox" checked={hideFast} onChange={(e) => setHideFast(e.target.checked)} /> Ocultar señales rápidas
           </label>
           <button className="btn small" onClick={() => setPaused(paused ? null : [...live.raw])}>
             {paused ? "Seguir" : "Pausar"}

@@ -72,9 +72,6 @@ export function PlcPage() {
             })}
           </tbody>
         </table>
-        <p className="muted small">
-          plc-mqtt-gateway lee el bloque DB1 por S7 cada 200 ms y publica cada señal en su sitio del UNS, solo cuando cambia más que su banda muerta y cada 10 s aunque no cambie. Es de solo lectura: ni la pasarela ni nadie escribe en el PLC.
-        </p>
         {gateway.map((g) => (
           <Row key={g.topic} label={g.topic.slice(T.services.length)}>
             <span className="small ellipsis" title={JSON.stringify(g.payload)}>
@@ -84,7 +81,7 @@ export function PlcPage() {
         ))}
       </Card>
 
-      <Card title="Cómo se generan las señales" aside={<DisturbanceButton />}>
+      <Card title="Escenario" aside={<DisturbanceButton />}>
         {scenario ? (
           <>
             <Chart
@@ -96,9 +93,6 @@ export function PlcPage() {
               xLabel={(t) => `${Math.round(t)} s`}
               height={170}
             />
-            <p className="muted small">
-              La presión que llega del colector sigue este perfil (dataset/plc/linea-104.csv) cada {Math.round(scenario.ciclo_s)} s. El resto es física sencilla: el caudal depende de la presión, el depósito T-101 se llena con él y el PLC arranca la bomba P-104 al 70 % y la para al 35 %. Si el robot cierra XV-104, la línea pierde presión, el caudal cae a cero y el depósito deja de llenarse.
-            </p>
             <Row label="Válvula XV-104">{scenario.valvula_cerrada ? "cerrada" : "abierta"}</Row>
           </>
         ) : (

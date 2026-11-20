@@ -123,12 +123,7 @@ export function RulesPage() {
   return (
     <div className="rules-page">
       <header className="panel-head row-between">
-        <div>
-          <h1>Reglas</h1>
-          <p className="muted">
-            Cruzan variables del UNS y deciden: avisar o, además, dar una orden. Solo se pueden dar las órdenes de la lista que tiene el motor; la consola no puede inventarse ninguna.
-          </p>
-        </div>
+        <h1>Reglas</h1>
         <button className="btn primary" disabled={!!editing || busy || !engine} onClick={() => setEditing({ rule: blank(vars), index: -1 })}>
           Nueva regla
         </button>
@@ -310,7 +305,6 @@ function Editor({
         <button className="btn small" onClick={proposeClear} type="button">
           Proponer rearme con margen
         </button>
-        <p className="muted small">Un margen entre el disparo y el rearme evita que la alarma entre y salga con el ruido de la señal.</p>
       </fieldset>
 
       <fieldset>

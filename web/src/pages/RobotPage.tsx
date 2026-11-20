@@ -24,7 +24,6 @@ export function RobotPage() {
       <section className="map-panel">
         <header className="panel-head">
           <h1>{plant?.nombre ?? "Planta"}</h1>
-          <p className="muted">Pulsa un equipo para ver su detalle. El robot recorre el pasillo marcado y se para en cada punto de inspección.</p>
         </header>
         {plant ? (
           <PlantMap plant={plant} selected={selected} onSelect={setSelected} />
@@ -39,7 +38,7 @@ export function RobotPage() {
         {device && plant ? <DeviceCard device={device} plant={plant} onClose={() => setSelected(null)} /> : <Overview />}
       </aside>
 
-      <Card className="log-card" title="Lo que está pasando" aside={<span className="muted">{live.rate} mensajes por segundo en el UNS</span>}>
+      <Card className="log-card" title="Eventos" aside={<span className="muted">{live.rate} msg/s</span>}>
         <ol className="log">
           {events.map(({ e, d }) => (
             <li key={`${e.topic}${e.t}`} className={d!.tone}>
@@ -47,7 +46,7 @@ export function RobotPage() {
               {d!.text}
             </li>
           ))}
-          {events.length === 0 && <li className="muted">Todavía nada. El robot está empezando la ronda.</li>}
+          {events.length === 0 && <li className="muted">Sin eventos</li>}
         </ol>
       </Card>
     </div>
@@ -170,7 +169,7 @@ function DeviceCard({ device: d, onClose }: { device: Device; plant: Plant; onCl
           )}
         </>
       ) : (
-        <p className="muted">Sin señal en el UNS: es parte del dibujo de la planta.</p>
+        <p className="muted">Sin señal en el UNS</p>
       )}
       {d.senal && <p className="topic">{d.senal}</p>}
     </Card>

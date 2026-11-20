@@ -10,12 +10,13 @@ Everything it shows comes from the UNS (MQTT) or from the robot's own server:
 * ``/api/reglas``: the rules the engine is running; PUT sends new ones to the engine,
   which validates them and answers. The console never writes a file.
 * ``/api/escenario/perturbacion``: the demo's disturbance button, through the UNS.
+* ``/api/servicios``: health of every container, checked from the console's networks.
 * ``/``: the web app, when it has been built into ``WEB_DIR``.
 
 The console's MQTT user can only read, plus those two requests (broker ACL): it
 cannot send an order to the plant. Configuration is environment only: MQTT_HOST,
 MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD, SITE, ROBOT_URL, GRAFANA_URL, WEB_DIR,
-STREAM_TOPICS.
+STREAM_TOPICS, SERVICES_FILE.
 """
 
 from __future__ import annotations
@@ -38,6 +39,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .live import Live, connect
+from .services import check_all, load_services
 
 log = logging.getLogger("console")
 
@@ -55,6 +57,7 @@ class Settings:
         self.robot_url = env.get("ROBOT_URL", "http://localhost:8081").rstrip("/")
         self.grafana_url = env.get("GRAFANA_URL", "")
         self.web_dir = env.get("WEB_DIR", "")
+        self.services_file = env.get("SERVICES_FILE", "")
         s = self.site
         default_streams = ",".join(
             [
@@ -149,6 +152,12 @@ def create_app(
     @app.get("/api/estado")
     def estado() -> dict[str, Any]:
         return {"broker": live.connected, "site": settings.site, "grafana_url": settings.grafana_url}
+
+    services = load_services(settings.services_file)
+
+    @app.get("/api/servicios")
+    async def servicios() -> Any:
+        return {"servicios": await check_all(services, live)}
 
     @app.get("/api/uns")
     def uns() -> dict[str, Any]:
