@@ -7,9 +7,9 @@
 
 **English** · [Español](README.es.md)
 
-The HMI of [industrial-uns-demo](https://github.com/aseinotegi/industrial-uns-demo): a web console that shows a plant **only through its Unified Namespace**. The inspection robot walks its route on a 2D map, stops to photograph the gauge and the extinguisher, and goes to close the valve when the rules ask it to. Next to it are the PLC signals, the whole namespace, the rules (editable) and what the vision model read in every photo.
+The HMI of [industrial-uns-demo](https://github.com/aseinotegi/industrial-uns-demo): a web console that shows a plant **only through its Unified Namespace**. An inspection robot walks the plant on a 2D map, stops to photograph gauges and extinguishers and goes to close a valve when the rules ask it to. Around it: the PLC signals, what the vision model read in each photo, a rule builder, the whole namespace, a live MQTT view, the history, the architecture and the security controls, two of them testable live.
 
-![The robot on its way to close XV-104 after both sources confirmed the overpressure](docs/robot.png)
+![The robot on its way to close XV-104 after vision and PLC confirmed the overpressure](docs/robot.png)
 
 It runs as part of the demo. From the demo's folder:
 
@@ -21,34 +21,39 @@ docker compose up --build      # then open http://localhost:8000
 
 | Page | What it shows |
 |---|---|
-| **Robot** (home) | Plant map drawn from `config/planta.yaml`, the robot where it says it is, live instrument values, rule states, last photo and a log of what is happening. A button starts an overpressure now |
-| **PLC** | The S7 tags (DB1) and their UNS topics, the scenario profile that generates the signal and a 5-minute trend: PLC transmitter as a line, vision readings as dots, with the rule thresholds |
-| **UNS** | The namespace as a tree, with value, quality and age. Click a topic to see the full message |
-| **Reglas** | Editor for `rules.yaml`, the engine status and every rule with the inputs that decided it |
-| **Visión** | Last inspection per point of interest (photo, value, quality, confidence, what the model saw, which checks failed) and the latest photos |
+| **Planta** (home) | The plant drawn from the robot's own map: buildings, walkways, pipes with flow, tank level, pump running, every instrument with its live value. The robot where it says it is, with its trail, battery and what its camera is looking at. Click any equipment for its detail and last photo |
+| **PLC** | The nine tags of DB1 with their UNS topics, how the scenario generates the signals, and trends of pressure (PLC line, vision dots), flow, level and motor current |
+| **Visión** | The last inspection of each point of the round: the real photo with its credit, value, quality, confidence, what the model saw and which checks failed |
+| **Reglas** | Rules as sentences, built from the variables of the UNS: *if* this and this, alarm (and an order from the engine's whitelist), *clears when* that. The engine validates and answers |
+| **UNS** | The namespace as a tree, with value, quality and age; any message in full |
+| **MQTT en vivo** | Every message as it reaches the broker, with filters, and the broker's own statistics (`$SYS`) |
+| **Histórico** | Grafana, embedded, reading TimescaleDB with a read-only user |
+| **Arquitectura** | Networks as zones and every service with its live status |
+| **Ciberseguridad** | The IEC 62443 controls in place and pending, and two live checks: the console tries to send an order (the broker drops it) and proposes a rule that opens the valve (the engine refuses it) |
 
 | | |
 |---|---|
-| ![PLC](docs/plc.png) | ![UNS](docs/uns.png) |
-| ![Rules](docs/reglas.png) | ![Vision](docs/vision.png) |
+| ![PLC](docs/plc.png) | ![Vision](docs/vision.png) |
+| ![Rules](docs/reglas.png) | ![Security](docs/ciber.png) |
+| ![MQTT](docs/mqtt.png) | ![Architecture](docs/arquitectura.png) |
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    B[("MQTT broker<br/>planta1/#")] --> L["live state<br/>last value · trends · events"]
+    B[("MQTT broker<br/>planta1/# · $SYS")] --> L["live state<br/>last value · trends · events"]
     L -- "WebSocket /api/ws" --> UI["React app"]
-    W["world (simulator)"] -- "map · scenario · photos" --> API["FastAPI"]
+    R["robot :8081"] -- "map · photos" --> API["FastAPI"]
     API --> UI
-    UI -- "PUT /api/reglas" --> F["rules.yaml"] -- "reloads" --> R["rules engine"]
-    R -- "servicios/rules/config" --> B
+    UI -- "new rules" --> API -- "…/rules/config/set" --> B
 ```
 
-- **The UNS is the only source.** The backend subscribes `planta1/#` and keeps the last message of each topic, a 15-minute trend of the numeric ones and a log of events. The browser gets all of it on connect and every new message after that, over one WebSocket.
-- **Streams are not events.** The robot's position (5 per second) and the PLC pressure move the picture but stay out of the log (`STREAM_TOPICS`). Retained values are state, so they never count as events or trend points.
-- **The rules engine is the only judge of the rules.** The console checks that the file is YAML with a `rules` list and writes it. The engine reloads it and answers on `planta1/servicios/rules/config`. If it refuses the file, the console puts the previous one back, so a broken file never stays on disk to break the next start.
-- **Read-only on the plant.** The console sends no orders to devices. The only thing it can change in the simulation is starting a disturbance, which is a scenario control and not a plant command.
-- **One container.** Vite builds the app, FastAPI serves it with the API. No chart or state library: a small SVG chart and a store on `useSyncExternalStore`, rendered at most once per frame.
+- **The UNS is the only source.** The backend subscribes `planta1/#` and the broker's `$SYS`, and keeps the last message of each topic, a 15-minute trend of the numeric ones and a log of events. The browser gets all of it on connect and every new message after that, over one WebSocket, rendered at most once per frame.
+- **It can only read.** Its MQTT user is read-only, plus two requests the broker's ACL allows: new rules and the demo's disturbance button. It cannot send an order to the plant, and the Ciberseguridad page proves it against the real broker.
+- **No files, no simulator.** Rules go to the engine over MQTT and the engine answers; the map and the photos come from the robot's own server. The console never reaches the simulated plant or its PLC.
+- **One container, read-only.** Vite builds the app and FastAPI serves it with the API. No chart or state library: a small SVG chart and a store on `useSyncExternalStore`.
+
+The look follows high-performance HMI practice (ISA-101): the plant in quiet greys, colour only where it means something. Cyan is live, amber a warning, red an alarm.
 
 ## Configuration
 
@@ -57,18 +62,19 @@ Environment only:
 | Variable | Default | |
 |---|---|---|
 | `MQTT_HOST`, `MQTT_PORT` | `localhost`, `1883` | broker |
+| `MQTT_USERNAME`, `MQTT_PASSWORD` | none | its user on the broker |
 | `SITE` | `planta1` | root of the namespace |
-| `WORLD_URL` | `http://localhost:8080` | simulator: map, scenario and photos |
-| `RULES_FILE` | none | rules file to edit. Without it the Reglas page is read-only |
-| `STREAM_TOPICS` | robot position, PT-104 | comma-separated MQTT patterns kept out of the event log |
+| `ROBOT_URL` | `http://localhost:8081` | the robot's server: map and photos |
+| `GRAFANA_URL` | same host, port 3000 | Grafana as the browser reaches it |
+| `STREAM_TOPICS` | robot position, fast PLC signals, `$SYS` | MQTT patterns kept out of the event log |
 | `WEB_DIR`, `PORT` | set in the image | |
 
 ## Development
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                                  # 15 tests, no broker needed
-MQTT_PORT=1883 WORLD_URL=http://localhost:8080 RULES_FILE=../industrial-uns-demo/config/rules.yaml plant-console
+pytest -q                                  # 20 tests, no broker needed
+MQTT_USERNAME=console MQTT_PASSWORD=demo-console plant-console
 
 cd web && npm install && npm run dev       # http://localhost:5173, /api goes to :8000
 ```
@@ -76,14 +82,13 @@ cd web && npm install && npm run dev       # http://localhost:5173, /api goes to
 ```text
 src/plant_console/
   live.py        UNS → last value per topic, trends, event log, listeners
-  rules_file.py  write the rules, wait for the engine, roll back if refused
-  app.py         HTTP + WebSocket API, serves the web app
+  app.py         HTTP + WebSocket API, rules and checks through the UNS, serves the web app
 web/src/
   live.ts        the WebSocket store
-  components/    PlantMap (SVG in metres), Chart, cards
-  pages/         Robot, PLC, UNS, Reglas, Visión
+  components/    PlantMap (SVG in metres), Chart, Photo, cards
+  pages/         Planta, PLC, Visión, Reglas, UNS, MQTT, Histórico, Arquitectura, Ciberseguridad
 ```
 
 ## License
 
-MIT · [Ander Sein](https://andersein.com)
+MIT · [Ander Sein](https://andersein.com). The real photos shown come from Wikimedia Commons with their own licences, credited next to each one.

@@ -14,6 +14,7 @@ export interface Entry {
 }
 
 const MAX_EVENTS = 400;
+const MAX_RAW = 600; // the MQTT terminal
 const TREND_S = 900;
 
 function numeric(entry: Entry): number | null {
@@ -61,8 +62,12 @@ class LiveStore {
   events: Entry[] = [];
   trends = new Map<string, [number, number][]>();
   photos = new Map<string, string>(); // image id → photo URL, from the robot's photo messages
+  raw: Entry[] = []; // every message as it arrives, for the MQTT terminal
+  trail: [number, number][] = []; // the robot's last positions
   socket = false;
   broker = false;
+  grafanaUrl = "";
+  credits: Record<string, { autor: string; licencia: string; fuente: string }> = {};
   rate = 0; // messages per second
   version = 0;
 
@@ -80,12 +85,25 @@ class LiveStore {
     }, 1000);
     setInterval(() => this.checkBroker(), 5000);
     this.checkBroker();
+    this.loadCredits();
+  }
+
+  private async loadCredits() {
+    try {
+      const r = await fetch("/api/fotos");
+      if (r.ok) this.credits = await r.json();
+      else setTimeout(() => this.loadCredits(), 5000);
+    } catch {
+      setTimeout(() => this.loadCredits(), 5000);
+    }
   }
 
   private async checkBroker() {
     try {
       const r = await fetch("/api/estado");
-      this.broker = r.ok && (await r.json()).broker === true;
+      const body = r.ok ? await r.json() : {};
+      this.broker = body.broker === true;
+      this.grafanaUrl = body.grafana_url || `${location.protocol}//${location.hostname}:3000`;
     } catch {
       this.broker = false;
     }
@@ -111,10 +129,16 @@ class LiveStore {
         this.events = data.events as Entry[];
         this.broker = data.connected === true;
         for (const e of this.events) this.notePhoto(e);
-        for (const e of this.topics.values()) this.addPoint(e);
+        for (const e of this.topics.values()) {
+          this.notePhoto(e);
+          this.addPoint(e);
+        }
       } else {
         const entry: Entry = { topic: data.topic, payload: data.payload, retained: data.retained, t: data.t };
         this.topics.set(entry.topic, entry);
+        this.raw.push(entry);
+        if (this.raw.length > MAX_RAW) this.raw.splice(0, this.raw.length - MAX_RAW);
+        if (entry.topic.endsWith("/posicion")) this.addTrail(entry);
         this.addPoint(entry);
         this.notePhoto(entry);
         if (data.event) {
@@ -127,9 +151,19 @@ class LiveStore {
     };
   }
 
+  private addTrail(entry: Entry) {
+    const p = payloadOf(entry);
+    if (typeof p.x !== "number" || typeof p.y !== "number") return;
+    const last = this.trail[this.trail.length - 1];
+    if (last && Math.hypot(last[0] - p.x, last[1] - p.y) < 0.6) return;
+    this.trail.push([p.x, p.y]);
+    if (this.trail.length > 60) this.trail.shift();
+  }
+
   private notePhoto(entry: Entry) {
     const p = payloadOf(entry);
-    if (entry.topic.endsWith("/foto") && typeof p.value === "string") {
+    // the photo messages, and the last photo of each point (retained, survives a reload)
+    if ((entry.topic.endsWith("/foto") || entry.topic.includes("/ultima-foto/")) && typeof p.value === "string") {
       const url = photoUrl(p.image_url);
       if (url) this.photos.set(p.value, url);
     }

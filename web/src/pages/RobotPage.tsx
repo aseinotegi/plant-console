@@ -1,78 +1,45 @@
+import { useState } from "react";
 import { Badge, Card, Row } from "../components/bits";
 import { DisturbanceButton } from "../components/Disturbance";
 import { PlantMap } from "../components/PlantMap";
-import { ROBOT_STATE, ago, clock, describe, num, qualityLabel, qualityTone, show } from "../format";
+import { Photo } from "../components/Photo";
+import { ROBOT_STATE, ago, clock, dec, describe, qualityLabel, qualityTone, reasonLabel, show } from "../format";
 import { type Entry, payloadOf, stamp, useLive, useNow } from "../live";
-import { usePlant } from "../plant";
+import { type Device, type Plant, usePlant } from "../plant";
 import { T } from "../topics";
 
 export function RobotPage() {
   const plant = usePlant();
   const live = useLive();
-  const now = useNow();
-  const pose = payloadOf(live.get(T.pose));
-  const mission = live.get(T.mission);
-  const pi = live.get(T.pi104);
-  const pt = live.get(T.pt104);
-  const xv = live.get(T.xv104);
-  const ext = live.get(T.ext12);
-  const rules = [...live.topics.values()].filter((e) => e.topic.startsWith(T.rules));
-  const lastInspection = [...live.events].reverse().find((e) => e.topic.endsWith("/inspeccion"));
-  const events = withoutRepeats(live.events.slice(-80))
+  const [selected, setSelected] = useState<string | null>(null);
+  const events = withoutRepeats(live.events.slice(-120))
     .reverse()
     .map((e) => ({ e, d: describe(e) }))
     .filter((x) => x.d)
-    .slice(0, 14);
+    .slice(0, 12);
+  const device = plant?.equipos.find((e) => e.id === selected);
 
   return (
     <div className="robot-page">
-      <Card
-        className="map-card"
-        title={plant?.nombre ?? "Planta"}
-        aside={<span className="muted">ruta de robot-01 · paradas 📷 foto ⚙ válvula</span>}
-      >
-        {plant ? <PlantMap plant={plant} /> : <p className="muted pad">Esperando el mapa del simulador…</p>}
-      </Card>
+      <section className="map-panel">
+        <header className="panel-head">
+          <h1>{plant?.nombre ?? "Planta"}</h1>
+          <p className="muted">Pulsa un equipo para ver su detalle. El robot recorre el pasillo marcado y se para en cada punto de inspección.</p>
+        </header>
+        {plant ? (
+          <PlantMap plant={plant} selected={selected} onSelect={setSelected} />
+        ) : (
+          <p className="muted pad">Esperando el mapa del robot…</p>
+        )}
+        <Legend />
+      </section>
 
-      <div className="side">
-        <Card title="robot-01" aside={<Badge tone={pose.value === "en-mision" || pose.value === "actuando" ? "warn" : "ok"}>{ROBOT_STATE[show(pose.value)] ?? show(pose.value)}</Badge>}>
-          <Row label="Siguiente parada">{show(pose.destino)}</Row>
-          <Row label="Posición">
-            {num(pose.x, 1)}, {num(pose.y, 1)} m
-          </Row>
-          <Row label="Última misión">
-            {mission ? `${show(payloadOf(mission).value)} · ${ago(stamp(mission), now)}` : "ninguna"}
-          </Row>
-        </Card>
+      <aside className="side">
+        <RobotCard />
+        {device && plant ? <DeviceCard device={device} plant={plant} onClose={() => setSelected(null)} /> : <Overview />}
+      </aside>
 
-        <Card title="Línea 104">
-          <Row label="PI-104 · visión">
-            {num(payloadOf(pi).value)} bar <Badge tone={qualityTone(payloadOf(pi).quality)}>{qualityLabel(payloadOf(pi).quality)}</Badge>
-            <span className="muted"> {ago(stamp(pi), now)}</span>
-          </Row>
-          <Row label="PT-104 · PLC">
-            {num(payloadOf(pt).value)} bar <span className="muted">{ago(stamp(pt), now)}</span>
-          </Row>
-          <Row label="XV-104">
-            <Badge tone={payloadOf(xv).value === "cerrada" ? "warn" : "idle"}>{show(payloadOf(xv).value)}</Badge>
-          </Row>
-          <Row label="EXT-12">
-            <Badge tone={payloadOf(ext).value === "NOK" ? "bad" : payloadOf(ext).value === "OK" ? "ok" : "idle"}>{show(payloadOf(ext).value)}</Badge>
-          </Row>
-          <div className="rules-mini">
-            {rules.map((r) => (
-              <Row key={r.topic} label={r.topic.slice(T.rules.length)}>
-                <Badge tone={payloadOf(r).value === "activa" ? "bad" : "ok"}>{show(payloadOf(r).value)}</Badge>
-              </Row>
-            ))}
-          </div>
-          <DisturbanceButton />
-        </Card>
-
-        {lastInspection && <LastPhoto entry={lastInspection} />}
-      </div>
-
-      <Card className="log-card" title="Lo que está pasando" aside={<span className="muted">{live.rate} mensajes/s en el UNS</span>}>
+      <Card className="log-card" title="Lo que está pasando" aside={<span className="muted">{live.rate} mensajes por segundo en el UNS</span>}>
         <ol className="log">
           {events.map(({ e, d }) => (
             <li key={`${e.topic}${e.t}`} className={d!.tone}>
@@ -87,6 +54,129 @@ export function RobotPage() {
   );
 }
 
+function Legend() {
+  return (
+    <ul className="legend">
+      <li>
+        <span className="swatch walk" /> Pasillo del robot
+      </li>
+      <li>
+        <span className="swatch water" /> Agua de proceso
+      </li>
+      <li>
+        <span className="swatch n2" /> Nitrógeno
+      </li>
+      <li>
+        <span className="swatch live" /> Dato en vivo
+      </li>
+      <li>
+        <span className="swatch warn" /> Aviso
+      </li>
+      <li>
+        <span className="swatch bad" /> Alarma
+      </li>
+    </ul>
+  );
+}
+
+function RobotCard() {
+  const live = useLive();
+  const now = useNow();
+  const pose = payloadOf(live.get(T.pose));
+  const mission = live.get(T.mission);
+  const battery = typeof pose.bateria === "number" ? pose.bateria : null;
+  const busy = pose.value === "en-mision" || pose.value === "actuando";
+  return (
+    <Card title="robot-01" aside={<Badge tone={busy ? "warn" : "ok"}>{ROBOT_STATE[show(pose.value)] ?? show(pose.value)}</Badge>}>
+      <div className="battery" aria-label={`Batería ${dec(battery, 0)} %`}>
+        <div className={`fill ${battery !== null && battery < 30 ? "low" : ""}`} style={{ width: `${battery ?? 0}%` }} />
+        <span>Batería {dec(battery, 0)} %</span>
+      </div>
+      <Row label="Siguiente parada">{show(pose.destino)}</Row>
+      <Row label="Velocidad">{dec(pose.velocidad, 1)} m/s</Row>
+      <Row label="Posición">
+        {dec(pose.x, 1)} · {dec(pose.y, 1)} m
+      </Row>
+      <Row label="Última misión">{mission ? `${show(payloadOf(mission).value)}, ${ago(stamp(mission), now)}` : "ninguna"}</Row>
+    </Card>
+  );
+}
+
+function Overview() {
+  const live = useLive();
+  const rules = [...live.topics.values()].filter((e) => e.topic.startsWith(T.rules));
+  const active = rules.filter((r) => payloadOf(r).value === "activa");
+  return (
+    <Card title="Línea 104" aside={<Badge tone={active.length ? "bad" : "ok"}>{active.length ? `${active.length} alarma${active.length > 1 ? "s" : ""}` : "Sin alarmas"}</Badge>}>
+      <Row label="Presión, visión PI-104">
+        {dec(payloadOf(live.get(T.pi104)).value, 2)} bar
+      </Row>
+      <Row label="Presión, PLC PT-104">{dec(payloadOf(live.get(T.pt104)).value, 2)} bar</Row>
+      <Row label="Caudal FT-104">{dec(payloadOf(live.get(T.ft104)).value, 1)} m³/h</Row>
+      <Row label="Nivel T-101">{dec(payloadOf(live.get(T.lt101)).value, 0)} %</Row>
+      <Row label="XV-104">{show(payloadOf(live.get(T.xv104)).value)}</Row>
+      <div className="rules-mini">
+        {rules.map((r) => (
+          <Row key={r.topic} label={r.topic.slice(T.rules.length)}>
+            <Badge tone={payloadOf(r).value === "activa" ? "bad" : "ok"}>{show(payloadOf(r).value)}</Badge>
+          </Row>
+        ))}
+      </div>
+      <DisturbanceButton />
+    </Card>
+  );
+}
+
+function DeviceCard({ device: d, onClose }: { device: Device; plant: Plant; onClose: () => void }) {
+  const live = useLive();
+  const now = useNow();
+  const entry = d.senal ? live.get(d.senal) : undefined;
+  const inspection = d.senal ? live.get(`${d.senal}/inspeccion`) : undefined;
+  const p = payloadOf(entry);
+  const i = payloadOf(inspection);
+  const visual = d.tipo === "manometro" || d.tipo === "extintor";
+  return (
+    <Card
+      title={d.id}
+      aside={
+        <button className="btn small" onClick={onClose}>
+          Cerrar
+        </button>
+      }
+    >
+      <p className="device-name">{d.nombre}</p>
+      {visual ? (
+        <>
+          <Photo entry={inspection} />
+          <Row label="Lectura">
+            {i.value === null || i.value === undefined ? "sin lectura" : `${show(i.value)}${i.unit ? ` ${i.unit}` : ""}`}
+          </Row>
+          <Row label="Calidad">
+            <Badge tone={qualityTone(i.quality)}>{qualityLabel(i.quality)}</Badge> {reasonLabel(i.status_reason)}
+          </Row>
+          <Row label="Inspección">{ago(stamp(inspection), now)}</Row>
+        </>
+      ) : d.senal ? (
+        <>
+          <Row label="Valor">
+            {show(p.value)} {typeof p.unit === "string" ? p.unit : ""}
+          </Row>
+          <Row label="Actualizado">{ago(stamp(entry), now)}</Row>
+          {d.id === "P-104" && (
+            <>
+              <Row label="Corriente">{dec(payloadOf(live.get(T.p104Current)).value, 1)} A</Row>
+              <Row label="Arranques">{show(payloadOf(live.get(T.p104Starts)).value)}</Row>
+            </>
+          )}
+        </>
+      ) : (
+        <p className="muted">Sin señal en el UNS: es parte del dibujo de la planta.</p>
+      )}
+      {d.senal && <p className="topic">{d.senal}</p>}
+    </Card>
+  );
+}
+
 /** A state published again with the same value (a heartbeat, the same valve check) is not news.
  * Photos and inspections are: each one is a new look at the plant. */
 function withoutRepeats(events: Entry[]): Entry[] {
@@ -98,18 +188,4 @@ function withoutRepeats(events: Entry[]): Entry[] {
     last.set(e.topic, v);
     return !same;
   });
-}
-
-function LastPhoto({ entry }: { entry: Entry }) {
-  const live = useLive();
-  const p = payloadOf(entry);
-  const url = typeof p.image === "string" ? live.photos.get(p.image) : undefined;
-  return (
-    <Card title={`Última foto · ${show(p.poi)}`} aside={<Badge tone={qualityTone(p.quality)}>{qualityLabel(p.quality)}</Badge>}>
-      {url ? <img className="photo" src={url} alt={`Foto de ${show(p.poi)}`} /> : <p className="muted">Foto no disponible</p>}
-      <p className="caption">
-        {p.value === null || p.value === undefined ? "Sin lectura" : `${show(p.value)}${p.unit ? ` ${p.unit}` : ""}`} · {show(p.status_reason)}
-      </p>
-    </Card>
-  );
 }

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { Badge, Card, Row } from "../components/bits";
-import { Chart } from "../components/Chart";
+import { Chart, type Series } from "../components/Chart";
 import { DisturbanceButton } from "../components/Disturbance";
-import { ago, num, show } from "../format";
+import { ago, dec, show } from "../format";
 import { live as store, payloadOf, stamp, summary, useLive, useNow } from "../live";
-import { CLEAR_BAR, HIGH_BAR, T } from "../topics";
+import { CLEAR_BAR, DB1, HIGH_BAR, T } from "../topics";
 
 interface Scenario {
   fase_s: number;
@@ -15,56 +15,71 @@ interface Scenario {
 }
 
 const WINDOW_S = 300;
+const TRENDS = [T.pt104, T.pi104, T.ft104, T.tt104, T.lt101, T.p104Current];
 
 export function PlcPage() {
   const live = useLive();
   const now = useNow();
   const scenario = useScenario();
   useEffect(() => {
-    store.backfill(T.pt104);
-    store.backfill(T.pi104);
+    for (const t of TRENDS) store.backfill(t);
   }, []);
-
-  const pt = live.get(T.pt104);
-  const alarm = live.get(T.pt104Alarm);
+  const trend = (topic: string) => relative(live.trends.get(topic) ?? [], now);
   const gateway = [...live.topics.values()].filter((e) => e.topic.startsWith(`${T.services}plc-gateway`));
-  const trendPt = live.trends.get(T.pt104) ?? [];
-  const trendPi = live.trends.get(T.pi104) ?? [];
+  const anyAlarm = DB1.some((t) => t.type === "BOOL" && t.name.startsWith("Alarma") && payloadOf(live.get(t.topic)).value === true);
+
+  const chart = (series: Series[], y: [number, number], lines: { y: number; label: string; color: string }[] = []) => (
+    <Chart series={series} x={[-WINDOW_S, 0]} y={y} lines={lines} xLabel={(t) => (t === 0 ? "ahora" : `${t} s`)} height={190} />
+  );
 
   return (
-    <div className="page-grid">
-      <Card title="PLC-1 · Siemens S7 simulado" aside={<Badge tone={alarm && payloadOf(alarm).value ? "bad" : "ok"}>{alarm && payloadOf(alarm).value ? "alarma alta" : "normal"}</Badge>}>
+    <div className="plc-page">
+      <Card title="PLC-1, Siemens S7 simulado" aside={<Badge tone={anyAlarm ? "bad" : "ok"}>{anyAlarm ? "Con alarmas" : "Sin alarmas"}</Badge>}>
         <table className="tags">
           <thead>
             <tr>
               <th>Dirección</th>
               <th>Tipo</th>
-              <th>Valor</th>
-              <th>Tema del UNS</th>
+              <th>Señal</th>
+              <th className="num">Valor</th>
+              <th>Último cambio</th>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td className="mono">DB1.DBD0</td>
-              <td>REAL</td>
-              <td className="mono">{num(payloadOf(pt).value, 3)} bar</td>
-              <td className="mono small">{T.pt104}</td>
-            </tr>
-            <tr>
-              <td className="mono">DB1.DBX4.0</td>
-              <td>BOOL</td>
-              <td className="mono">{show(payloadOf(alarm).value)}</td>
-              <td className="mono small">{T.pt104Alarm}</td>
-            </tr>
+            {DB1.map((t) => {
+              const e = live.get(t.topic);
+              const p = payloadOf(e);
+              const bool = t.type === "BOOL";
+              return (
+                <tr key={t.address} title={t.topic}>
+                  <td className="addr">{t.address}</td>
+                  <td>{t.type}</td>
+                  <td>
+                    <b>{t.tag}</b> {t.name}
+                  </td>
+                  <td className="num">
+                    {bool ? (
+                      <Badge tone={p.value ? (t.name.startsWith("Alarma") ? "bad" : "ok") : "idle"}>{p.value ? "1" : "0"}</Badge>
+                    ) : t.type === "INT" ? (
+                      show(p.value)
+                    ) : (
+                      `${dec(p.value, 2)} ${typeof p.unit === "string" ? p.unit : ""}`
+                    )}
+                  </td>
+                  <td className="muted">{ago(stamp(e), now)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         <p className="muted small">
-          La pasarela plc-mqtt-gateway lee el bloque DB1 por S7 cada 200 ms y publica cada variable en su sitio del UNS. Es de solo lectura: el PLC no recibe órdenes de nadie.
+          plc-mqtt-gateway lee el bloque DB1 por S7 cada 200 ms y publica cada señal en su sitio del UNS, solo cuando cambia más que su banda muerta y cada 10 s aunque no cambie. Es de solo lectura: ni la pasarela ni nadie escribe en el PLC.
         </p>
         {gateway.map((g) => (
           <Row key={g.topic} label={g.topic.slice(T.services.length)}>
-            <span className="mono small ellipsis" title={JSON.stringify(g.payload)}>{summary(g)}</span>
-            <span className="muted"> {ago(stamp(g), now)}</span>
+            <span className="small ellipsis" title={JSON.stringify(g.payload)}>
+              {summary(g)}
+            </span>
           </Row>
         ))}
       </Card>
@@ -73,16 +88,16 @@ export function PlcPage() {
         {scenario ? (
           <>
             <Chart
-              series={[{ points: scenario.perfil, color: "var(--soft)", label: "perfil del escenario" }]}
+              series={[{ points: scenario.perfil, color: "var(--soft)", label: "presión de entrada, bar" }]}
               x={[0, scenario.ciclo_s]}
               y={[3.5, 7.5]}
-              lines={[{ y: HIGH_BAR, label: "6.0", color: "var(--bad)" }]}
+              lines={[{ y: HIGH_BAR, label: "6,0", color: "var(--bad)" }]}
               cursor={scenario.fase_s}
               xLabel={(t) => `${Math.round(t)} s`}
-              height={180}
+              height={170}
             />
             <p className="muted small">
-              El simulador repite este perfil (dataset/plc/linea-104.csv) cada {Math.round(scenario.ciclo_s)} s, con algo de ruido. La subida empieza en el segundo {Math.round(scenario.perturbacion_s)}. Si el robot cierra XV-104, la presión baja aunque el perfil siga arriba, y la válvula se vuelve a abrir para la siguiente perturbación.
+              La presión que llega del colector sigue este perfil (dataset/plc/linea-104.csv) cada {Math.round(scenario.ciclo_s)} s. El resto es física sencilla: el caudal depende de la presión, el depósito T-101 se llena con él y el PLC arranca la bomba P-104 al 70 % y la para al 35 %. Si el robot cierra XV-104, la línea pierde presión, el caudal cae a cero y el depósito deja de llenarse.
             </p>
             <Row label="Válvula XV-104">{scenario.valvula_cerrada ? "cerrada" : "abierta"}</Row>
           </>
@@ -90,31 +105,36 @@ export function PlcPage() {
           <p className="muted">Esperando al simulador…</p>
         )}
       </Card>
-      <Card title="Presión en la línea 104 · últimos 5 min" className="full">
-        <Chart
-          series={[
-            { points: relative(trendPt, now), color: "var(--accent)", label: "PT-104 (PLC)" },
-            { points: relative(trendPi, now), color: "var(--alarm)", label: "PI-104 (visión)", dots: true },
-          ]}
-          x={[-WINDOW_S, 0]}
-          y={[3.5, 7.5]}
-          lines={[
-            { y: HIGH_BAR, label: "dispara 6.0", color: "var(--bad)" },
-            { y: CLEAR_BAR, label: "rearma 5.5", color: "var(--soft)" },
-          ]}
-          xLabel={(t) => (t === 0 ? "ahora" : `${t} s`)}
-          width={1280}
-          height={260}
-        />
-        <p className="muted small">La línea es el transmisor leído por el PLC. Los puntos son lo que lee la visión en cada foto del manómetro. La regla solo actúa cuando los dos pasan de 6 bar.</p>
-      </Card>
 
+      <div className="trend-grid">
+        <Card title="Presión, línea 104">
+          {chart(
+            [
+              { points: trend(T.pt104), color: "var(--accent)", label: "PT-104, PLC" },
+              { points: trend(T.pi104), color: "var(--alarm)", label: "PI-104, visión", dots: true },
+            ],
+            [3.5, 7.5],
+            [
+              { y: HIGH_BAR, label: "dispara 6,0", color: "var(--bad)" },
+              { y: CLEAR_BAR, label: "rearma 5,5", color: "var(--soft)" },
+            ],
+          )}
+        </Card>
+        <Card title="Caudal FT-104, m³/h">{chart([{ points: trend(T.ft104), color: "var(--accent)", label: "caudal" }], [0, 60])}</Card>
+        <Card title="Nivel T-101, %">
+          {chart([{ points: trend(T.lt101), color: "var(--accent)", label: "nivel" }], [0, 100], [
+            { y: 90, label: "alarma 90", color: "var(--bad)" },
+            { y: 70, label: "arranca P-104", color: "var(--soft)" },
+            { y: 35, label: "para P-104", color: "var(--soft)" },
+          ])}
+        </Card>
+        <Card title="Motor P-104, A">{chart([{ points: trend(T.p104Current), color: "var(--accent)", label: "corriente" }], [0, 120])}</Card>
+      </div>
     </div>
   );
 }
 
-const relative = (points: [number, number][], now: number): [number, number][] =>
-  points.map(([t, v]) => [t - now, v]);
+const relative = (points: [number, number][], now: number): [number, number][] => points.map(([t, v]) => [t - now, v]);
 
 function useScenario(): Scenario | null {
   const [s, setS] = useState<Scenario | null>(null);
@@ -125,7 +145,7 @@ function useScenario(): Scenario | null {
         const r = await fetch("/api/escenario");
         if (r.ok && alive) setS(await r.json());
       } catch {
-        /* the world may be restarting */
+        /* the simulator may be restarting */
       }
     };
     tick();

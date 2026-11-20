@@ -6,7 +6,7 @@ export function Card({ title, aside, children, className }: { title?: ReactNode;
     <section className={`card ${className ?? ""}`}>
       {(title || aside) && (
         <header className="card-head">
-          <h2>{title}</h2>
+          {title && <h2>{title}</h2>}
           {aside}
         </header>
       )}
@@ -15,7 +15,7 @@ export function Card({ title, aside, children, className }: { title?: ReactNode;
   );
 }
 
-export function Badge({ tone, children }: { tone: Tone; children: ReactNode }) {
+export function Badge({ tone, children }: { tone: Tone | "live"; children: ReactNode }) {
   return <span className={`badge ${tone}`}>{children}</span>;
 }
 

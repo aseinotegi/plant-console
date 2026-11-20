@@ -2,20 +2,46 @@ import { useEffect, useState } from "react";
 
 export type Point = [number, number];
 
+export interface Zone {
+  id: string;
+  nombre: string;
+  tipo: "edificio" | "area" | "cubeto" | "vallado";
+  x: number;
+  y: number;
+  ancho: number;
+  alto: number;
+  puertas?: Point[];
+  rotulo?: Point; // where the name goes, when the top-left corner is taken
+}
+
+export interface Device {
+  id: string;
+  tipo: string;
+  x: number;
+  y: number;
+  nombre: string;
+  senal?: string;
+  rango?: [number, number];
+  unidad?: string;
+  radio?: number;
+  letras?: string;
+  cable?: string;
+}
+
 export interface Plant {
   nombre: string;
   ancho: number;
   alto: number;
-  zonas: { id: string; nombre: string; x: number; y: number; ancho: number; alto: number }[];
-  tuberias: { id: string; desde: Point; hasta: Point }[];
-  equipos: { id: string; tipo: string; x: number; y: number; nombre: string; cable?: string }[];
+  zonas: Zone[];
+  tuberias: { id: string; nombre?: string; linea: string; puntos: Point[] }[];
+  equipos: Device[];
   ruta: Point[];
-  paradas: { punto: Point; accion: string; equipo: string }[];
+  paradas: { punto: Point; accion: "foto" | "valvula" | "carga"; equipo: string }[];
 }
 
 let cached: Promise<Plant> | null = null;
 
-/** The plant map, from the same file the robot walks (config/planta.yaml). */
+/** The plant map, from the robot: the same file it walks (config/planta.yaml). */
 export function usePlant(): Plant | null {
   const [plant, setPlant] = useState<Plant | null>(null);
   useEffect(() => {
@@ -29,7 +55,7 @@ export function usePlant(): Plant | null {
         (p) => alive && setPlant(p),
         () => {
           cached = null;
-          if (alive) setTimeout(load, 3000); // the world may still be starting
+          if (alive) setTimeout(load, 3000); // the robot may still be starting
         },
       );
     };

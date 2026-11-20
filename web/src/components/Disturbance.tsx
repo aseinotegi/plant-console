@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-/** Starts the pressure surge now instead of waiting for the next one in the scenario. */
+/** Demo only: starts the pressure surge now instead of waiting for the next one. */
 export function DisturbanceButton() {
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -8,9 +8,16 @@ export function DisturbanceButton() {
     setBusy(true);
     try {
       const r = await fetch("/api/escenario/perturbacion", { method: "POST" });
-      setNote(r.ok ? "Perturbación en marcha: la presión empieza a subir" : "Ya hay una perturbación en curso");
+      const body = await r.json().catch(() => ({}));
+      setNote(
+        r.ok
+          ? "Perturbación lanzada: la presión empieza a subir"
+          : body.estado === "ya-hay-una"
+            ? "Ya hay una perturbación en curso"
+            : "El simulador no ha contestado",
+      );
     } catch {
-      setNote("El simulador no responde");
+      setNote("La consola no responde");
     } finally {
       setBusy(false);
       setTimeout(() => setNote(null), 6000);

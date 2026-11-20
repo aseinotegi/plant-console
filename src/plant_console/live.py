@@ -139,17 +139,29 @@ def _offer(q: asyncio.Queue, entry: Entry) -> None:
     q.put_nowait(entry)
 
 
-def connect(live: Live, host: str, port: int, site: str, client_id: str = "plant-console"):
-    """Subscribes ``<site>/#`` and feeds ``live``. Returns the client (already looping)."""
+def connect(
+    live: Live,
+    host: str,
+    port: int,
+    site: str,
+    username: str | None = None,
+    password: str | None = None,
+    client_id: str = "plant-console",
+):
+    """Subscribes ``<site>/#`` (and the broker's ``$SYS`` statistics) and feeds ``live``.
+    Returns the client, already looping. Its user can only read, plus the two demo
+    requests the console makes (see the broker's ACL)."""
     import paho.mqtt.client as mqtt
 
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=client_id)
+    if username:
+        client.username_pw_set(username, password)
 
     def on_connect(client, userdata, flags, reason_code, properties) -> None:
         live.connected = not reason_code.is_failure
         if live.connected:
             log.info("connected to %s:%d, subscribing %s/#", host, port, site)
-            client.subscribe(f"{site}/#", qos=0)
+            client.subscribe([(f"{site}/#", 0), ("$SYS/broker/#", 0)])
 
     def on_disconnect(client, userdata, flags, reason_code, properties) -> None:
         live.connected = False

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Badge, Card } from "../components/bits";
 import { ago, clock, qualityLabel, qualityTone } from "../format";
 import { type Entry, payloadOf, stamp, summary, useLive, useNow } from "../live";
+import { SITE } from "../topics";
 
 interface Node {
   name: string;
@@ -29,42 +30,44 @@ export function UnsPage() {
   const now = useNow();
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
-  const entries = [...live.topics.values()].filter((e) => e.topic.includes(filter.trim()));
+  const entries = [...live.topics.values()].filter((e) => e.topic.startsWith(`${SITE}/`) && e.topic.includes(filter.trim()));
   const tree = build(entries);
   const chosen = selected ? live.get(selected) : undefined;
 
   return (
-    <div className="uns-page">
+    <div className={`uns-page ${chosen ? "with-detail" : ""}`}>
       <Card
         title="Unified Namespace"
         aside={
           <span className="muted">
-            {live.topics.size} temas · {live.rate} mensajes/s
+            {entries.length} temas, {live.rate} mensajes por segundo
           </span>
         }
       >
-        <input className="filter" placeholder="Filtrar temas (p. ej. pi-104)" value={filter} onChange={(e) => setFilter(e.target.value)} />
+        <input className="filter" placeholder="Filtrar temas, por ejemplo pi-104" value={filter} onChange={(e) => setFilter(e.target.value)} />
         <ul className="tree">
           {[...tree.children.values()].map((n) => (
             <TreeNode key={n.path} node={n} now={now} selected={selected} onSelect={setSelected} />
           ))}
         </ul>
       </Card>
-      <Card title="Mensaje" className="detail">
-        {chosen ? (
-          <>
-            <p className="mono small break">{chosen.topic}</p>
-            <p className="muted small">
-              Recibido {clock(chosen.t)} ({ago(stamp(chosen), now)}) · {chosen.retained ? "retenido (estado)" : "en vivo"}
-            </p>
-            <pre className="json">{JSON.stringify(chosen.payload, null, 2)}</pre>
-          </>
-        ) : (
-          <p className="muted">
-            Elige un tema. Cada mensaje sigue el mismo contrato: solo <code>value</code> es obligatorio, y <code>unit</code>, <code>ts</code>, <code>source</code> y <code>quality</code> cuando aplican.
+      {chosen && (
+        <Card
+          title="Mensaje"
+          className="detail"
+          aside={
+            <button className="btn small" onClick={() => setSelected(null)}>
+              Cerrar
+            </button>
+          }
+        >
+          <p className="topic">{chosen.topic}</p>
+          <p className="muted small">
+            Recibido a las {clock(chosen.t)} ({ago(stamp(chosen), now)}), {chosen.retained ? "retenido: es estado" : "en vivo"}
           </p>
-        )}
-      </Card>
+          <pre className="json">{JSON.stringify(chosen.payload, null, 2)}</pre>
+        </Card>
+      )}
     </div>
   );
 }
@@ -78,11 +81,11 @@ function TreeNode({ node, now, selected, onSelect }: { node: Node; now: number; 
       {e ? (
         <button className={`leaf ${selected === e.topic ? "sel" : ""}`} onClick={() => onSelect(e.topic)}>
           <span className="seg">{node.name}</span>
-          <span className="val mono">
+          <span className="val">
             {summary(e)}
             {typeof p.unit === "string" ? ` ${p.unit}` : ""}
           </span>
-          {typeof p.quality === "string" && <Badge tone={qualityTone(p.quality)}>{qualityLabel(p.quality)}</Badge>}
+          {typeof p.quality === "string" && p.quality !== "good" && <Badge tone={qualityTone(p.quality)}>{qualityLabel(p.quality)}</Badge>}
           <span className="age muted">{ago(stamp(e), now)}</span>
         </button>
       ) : (
