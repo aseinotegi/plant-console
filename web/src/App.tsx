@@ -44,13 +44,12 @@ export function App() {
   return (
     <>
       <header className="top">
-        <a className="brand" href="#/">
+        <a className="brand" href="#/" aria-label="Inicio" title="Inicio">
           <svg viewBox="0 0 32 32" aria-hidden className="logo">
             <rect x="7" y="11" width="18" height="11" rx="3" />
             <circle cx="21" cy="16.5" r="2" />
             <path d="M11 25v-3M21 25v-3" />
           </svg>
-          Consola de planta
         </a>
         <nav>
           {PAGES.map((p) => (

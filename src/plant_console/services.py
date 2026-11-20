@@ -12,14 +12,24 @@ service it uses what any client on the network has:
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import socket
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from .live import Live
+
+# A name on a network the console is not in takes seconds to fail: Docker forwards it
+# to the host's DNS. Those lookups get their own threads (uvloop's pool has only four,
+# shared with every other connection the console opens) and are remembered for a while,
+# so the page asking every few seconds never queues behind them.
+_DNS = ThreadPoolExecutor(max_workers=16, thread_name_prefix="dns")
+DNS_TTL_S = 30.0
+_dns_cache: dict[str, tuple[float, list[str]]] = {}
 
 
 def load_services(path: str | Path | None) -> list[dict[str, Any]]:
@@ -30,21 +40,40 @@ def load_services(path: str | Path | None) -> list[dict[str, Any]]:
 
 
 async def resolve(host: str) -> list[str]:
+    """The IPv4 addresses of ``host``, as this container resolves it (cached)."""
+    hit = _dns_cache.get(host)
+    if hit and time.monotonic() - hit[0] < DNS_TTL_S:
+        return hit[1]
     loop = asyncio.get_running_loop()
     try:
-        infos = await loop.getaddrinfo(host, None, family=socket.AF_INET)
+        infos = await loop.run_in_executor(_DNS, lambda: socket.getaddrinfo(host, None, socket.AF_INET))
+        ips = sorted({str(info[4][0]) for info in infos})
     except OSError:
-        return []
-    return sorted({info[4][0] for info in infos})
+        ips = []
+    _dns_cache[host] = (time.monotonic(), ips)
+    return ips
+
+
+def _is_ip(host: str) -> bool:
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return True
 
 
 async def connect(target: str, timeout: float = 1.0) -> float | None:
-    """Milliseconds to open a TCP connection, or None if it cannot be opened."""
+    """Milliseconds to open a TCP connection, or None if it cannot be opened.
+    The timeout is for the connection only: the name is resolved first, apart."""
     host, _, port = target.rpartition(":")
+    ips = [host] if _is_ip(host) else await resolve(host)
+    if not ips or not port.isdigit():
+        return None
     start = time.perf_counter()
     try:
-        _, writer = await asyncio.wait_for(asyncio.open_connection(host, int(port)), timeout)
-    except (OSError, asyncio.TimeoutError, ValueError):
+        _, writer = await asyncio.wait_for(asyncio.open_connection(ips[0], int(port)), timeout)
+    except (OSError, asyncio.TimeoutError):
+        _dns_cache.pop(host, None)  # it may have a new address: look it up again next time
         return None
     writer.close()
     return round((time.perf_counter() - start) * 1000, 1)

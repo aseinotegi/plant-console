@@ -1,8 +1,10 @@
 import asyncio
 import json
+import socket
+import time
 
 from plant_console.live import Live
-from plant_console.services import check, connect, load_services, uns_signal
+from plant_console.services import check, check_all, connect, load_services, uns_signal
 
 
 def run(coro):
@@ -41,6 +43,40 @@ def test_tcp_check_measures_or_fails():
 
     open_ms, closed = run(scenario())
     assert open_ms is not None and closed is None
+
+
+def test_slow_names_on_other_networks_do_not_make_a_reachable_service_look_down(monkeypatch):
+    """Names that take seconds to fail (Docker asks the host's DNS) used to hold the
+    lookups of reachable services past the TCP timeout: Grafana and the console looked down."""
+    from plant_console import services
+
+    real = socket.getaddrinfo
+    calls: list[str] = []
+
+    def getaddrinfo(host, *args, **kwargs):
+        calls.append(host)
+        if host.endswith(".lento"):
+            time.sleep(1.5)
+            raise socket.gaierror("not on this network")
+        return real(host, *args, **kwargs)
+
+    monkeypatch.setattr(services.socket, "getaddrinfo", getaddrinfo)
+    monkeypatch.setattr(services, "_dns_cache", {})
+
+    async def scenario():
+        server = await asyncio.start_server(lambda r, w: w.close(), "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        catalog = [{"nombre": f"s{i}.lento"} for i in range(8)]
+        catalog.append({"nombre": "web", "tcp": f"localhost:{port}"})
+        first = await check_all(catalog, Live())
+        again = await check_all(catalog, Live())
+        server.close()
+        return first, again
+
+    first, again = run(scenario())
+    assert first[-1]["tcp_ms"] is not None and first[-1]["estado"] == "ok"
+    assert again[-1]["estado"] == "ok"
+    assert calls.count("s0.lento") == 1  # remembered: the next poll does not wait again
 
 
 def test_catalog_file(tmp_path):
