@@ -32,7 +32,7 @@ interface Box {
   x: number;
   y: number;
   w?: number;
-  kind?: "hub" | "fw" | "edge"; // edge and fw: no container behind, no state
+  kind?: "hub" | "fw" | "edge" | "demo"; // edge and fw: no container behind, no state
   showroom?: boolean; // only drawn in the public demo
 }
 
@@ -51,7 +51,7 @@ const BOXES: Box[] = [
   { id: "firewall", label: "SCALANCE SC-600", x: 500, y: 309, w: 190, kind: "fw" },
   { id: "world", label: "PLC-1", x: 230, y: 420 },
   { id: "robot", label: "robot", x: 500, y: 420 },
-  { id: "simulador", label: "escenario", x: 770, y: 420 },
+  { id: "simulador", label: "escenario", x: 770, y: 420, kind: "demo" },
 ];
 
 const LINKS: [string, string, string, "mqtt" | "other"][] = [
@@ -69,7 +69,25 @@ const LINKS: [string, string, string, "mqtt" | "other"][] = [
   ["world", "firewall", "s7", "other"],
   ["robot", "firewall", "", "mqtt"],
   ["simulador", "firewall", "", "mqtt"],
+  ["robot", "world", "", "other"],
+  ["simulador", "world", "", "other"],
 ];
+
+// Which way the data goes. Reading: from the field up to whoever looks at it.
+// Writing: the only two ways down, and neither touches the PLC.
+type Mode = "todo" | "lectura" | "escritura";
+const FLOWS: Record<Exclude<Mode, "todo">, [string, string][]> = {
+  lectura: [
+    ["world", "firewall"], ["firewall", "plc-gateway"], ["plc-gateway", "broker"],
+    ["robot", "firewall"], ["firewall", "broker"], ["broker", "inspector"],
+    ["broker", "rules"], ["broker", "historian"], ["historian", "timescaledb"], ["timescaledb", "grafana"],
+    ["broker", "console"], ["console", "cloudflared"], ["grafana", "cloudflared"],
+  ],
+  escritura: [
+    ["cloudflared", "console"], ["console", "broker"], ["broker", "firewall"], ["firewall", "simulador"], ["simulador", "world"],
+    ["rules", "broker"], ["firewall", "robot"], ["robot", "world"],
+  ],
+};
 
 export function useServices(): Service[] {
   const [s, setS] = useState<Service[]>([]);
@@ -100,15 +118,74 @@ export function ArchitecturePage() {
   const boxes = BOXES.filter((b) => showroom || !b.showroom);
   const at = (id: string) => boxes.find((b) => b.id === id);
   const healthy = services.filter((s) => s.estado === "ok").length;
+  const [mode, setMode] = useState<Mode>("todo");
+  const flow = mode === "todo" ? [] : FLOWS[mode].filter(([a, b]) => at(a) && at(b));
+  const inFlow = new Set(flow.flat());
 
   return (
     <div className="arch-page">
       <header className="panel-head row-between">
         <h1>Arquitectura</h1>
+        <div className="segmented arch-modes" role="group" aria-label="Flujo de datos">
+          {(["todo", "lectura", "escritura"] as Mode[]).map((m) => (
+            <button key={m} className={`btn small ${mode === m ? "primary" : ""}`} onClick={() => setMode(m)}>
+              {m === "todo" ? "Todo" : m === "lectura" ? "Lectura" : "Escritura"}
+            </button>
+          ))}
+        </div>
         <Badge tone={healthy === services.length && services.length ? "ok" : "warn"}>
           {healthy}/{services.length} healthy
         </Badge>
       </header>
+
+      <section className={`card arch-card ${mode}`}>
+        <svg viewBox="0 0 1000 510" className="arch" role="img" aria-label="Redes y servicios">
+          <Zone y={22} h={92} label="publica" />
+          <Zone y={124} h={170} w={760} label="uns" />
+          <Zone x={780} y={124} h={170} w={210} label="datos" />
+          <Zone y={304} h={196} label="campo" />
+          {LINKS.map(([a, b, label, kind]) => {
+            const A = at(a);
+            const B = at(b);
+            if (!A || !B) return null;
+            return (
+              <g key={a + b} className={`link ${kind}`}>
+                <line x1={A.x} y1={A.y} x2={B.x} y2={B.y} />
+                {label && (
+                  <text x={(A.x + B.x) / 2} y={(A.y + B.y) / 2 - 5}>
+                    {label}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+          {flow.map(([a, b]) => {
+            const A = at(a)!;
+            const B = at(b)!;
+            return <line key={`${a}>${b}`} className={`flow ${mode}`} x1={A.x} y1={A.y} x2={B.x} y2={B.y} />;
+          })}
+          {boxes.map((b) => {
+            const w = b.w ?? 160;
+            const s = by(b.id);
+            const state = s?.estado ?? "sin-datos";
+            const plain = b.kind === "fw" || b.kind === "edge";
+            const x = plain ? 14 : 28;
+            return (
+              <g key={b.id} className={`svc ${b.kind ?? ""} ${mode !== "todo" && !inFlow.has(b.id) ? "dim" : ""}`} transform={`translate(${b.x - w / 2},${b.y - 22})`}>
+                {b.kind === "fw" && <title>Referencia de planta; en la demo lo hacen las redes Docker</title>}
+                <rect width={w} height={44} rx={8} />
+                {!plain && <circle cx={16} cy={22} r={5} className={`state ${state}`} />}
+                <text x={x} y={20} className="svc-name">
+                  {b.label}
+                </text>
+                <text x={x} y={35} className="svc-role">
+                  {b.kind === "fw" ? "firewall OT / IT" : b.kind === "edge" ? "internet" : s?.visible ? s.ips[0] : s ? "aislada" : ""}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </section>
 
       <section className="card">
         <table className="services">
@@ -157,49 +234,6 @@ export function ArchitecturePage() {
         </table>
       </section>
 
-      <section className="card arch-card">
-        <svg viewBox="0 0 1000 510" className="arch" role="img" aria-label="Redes y servicios">
-          <Zone y={22} h={92} label="publica" />
-          <Zone y={124} h={170} w={760} label="uns" />
-          <Zone x={780} y={124} h={170} w={210} label="datos" />
-          <Zone y={304} h={196} label="campo" />
-          {LINKS.map(([a, b, label, kind]) => {
-            const A = at(a);
-            const B = at(b);
-            if (!A || !B) return null;
-            return (
-              <g key={a + b} className={`link ${kind}`}>
-                <line x1={A.x} y1={A.y} x2={B.x} y2={B.y} />
-                {label && (
-                  <text x={(A.x + B.x) / 2} y={(A.y + B.y) / 2 - 5}>
-                    {label}
-                  </text>
-                )}
-              </g>
-            );
-          })}
-          {boxes.map((b) => {
-            const w = b.w ?? 160;
-            const s = by(b.id);
-            const state = s?.estado ?? "sin-datos";
-            const plain = b.kind === "fw" || b.kind === "edge";
-            const x = plain ? 14 : 28;
-            return (
-              <g key={b.id} className={`svc ${b.kind ?? ""}`} transform={`translate(${b.x - w / 2},${b.y - 22})`}>
-                {b.kind === "fw" && <title>Referencia de planta; en la demo lo hacen las redes Docker</title>}
-                <rect width={w} height={44} rx={8} />
-                {!plain && <circle cx={16} cy={22} r={5} className={`state ${state}`} />}
-                <text x={x} y={20} className="svc-name">
-                  {b.label}
-                </text>
-                <text x={x} y={35} className="svc-role">
-                  {b.kind === "fw" ? "firewall OT / IT" : b.kind === "edge" ? "internet" : s?.visible ? s.ips[0] : s ? "aislada" : ""}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-      </section>
     </div>
   );
 }

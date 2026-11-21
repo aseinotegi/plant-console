@@ -595,3 +595,12 @@ table.services .num { text-align: right; white-space: nowrap; }
 .plc-path-card { grid-column: 1 / -1; }
 .arch .svc.fw rect { stroke: var(--alarm); stroke-width: 1.4; }
 .arch .svc.edge rect { stroke: var(--steel-light); stroke-dasharray: 4 3; }
+.arch-modes { margin-left: auto; margin-right: 12px; }
+.arch .svc.demo rect { stroke-dasharray: 4 3; }
+.arch .svc.dim { opacity: 0.35; }
+.arch-card.lectura .link, .arch-card.escritura .link { opacity: 0.25; }
+.arch .flow { stroke-width: 3; stroke-dasharray: 8 8; stroke-linecap: round; animation: arch-flow 0.9s linear infinite; }
+.arch .flow.lectura { stroke: var(--accent); }
+.arch .flow.escritura { stroke: var(--alarm); }
+@keyframes arch-flow { to { stroke-dashoffset: -16; } }
+@media (prefers-reduced-motion: reduce) { .arch .flow { animation: none; } }
