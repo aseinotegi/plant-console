@@ -52,7 +52,6 @@ function poiFor(pois: Record<string, PoiConfig>, kind: Kind): string | null {
 }
 
 type Live = ReturnType<typeof useLive>;
-type Origin = "all" | "real" | "generated";
 const TRIAL_TOPIC = "planta1/ensayos/vision";
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
@@ -123,17 +122,16 @@ export function VisionPage() {
   ].sort();
   const [poi, setPoi] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [origin, setOrigin] = useState<Origin>("all");
   const [trial, setTrial] = useState<TrialRun | null>(null);
   const [upload, setUpload] = useState<UploadCase | null>(null);
   const [kind, setKind] = useState<Kind>("manometro");
   const [uploadTrial, setUploadTrial] = useState<TrialRun | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const current = poi ?? (selectedFile ? live.credits[selectedFile]?.poi : null) ?? ids[0] ?? null;
-  const catalogFiles = Object.keys(live.credits)
-    .filter((file) => live.credits[file].poi === current)
-    .filter((file) => origin === "all" || (origin === "real") === isReal(file, live))
-    .sort((a, b) => a.localeCompare(b));
+  // Only real photos are shown; generated ones may still feed the robot's round.
+  const realFiles = Object.keys(live.credits).filter((file) => isReal(file, live));
+  const catalogIds = ids.filter((id) => realFiles.some((file) => live.credits[file].poi === id));
+  const current = poi ?? (selectedFile ? live.credits[selectedFile]?.poi : null) ?? catalogIds[0] ?? null;
+  const catalogFiles = realFiles.filter((file) => live.credits[file].poi === current).sort((a, b) => a.localeCompare(b));
   const file = selectedFile && catalogFiles.includes(selectedFile) ? selectedFile : catalogFiles[0] ?? null;
   const credit = file ? live.credits[file] : undefined;
   const cfg = current ? pois[current] : undefined;
@@ -159,7 +157,6 @@ export function VisionPage() {
     const selected = fileOf(live, candidate);
     if (!selected) return;
     setPoi(live.credits[selected]?.poi ?? String(payloadOf(candidate).poi));
-    setOrigin("all");
     setSelectedFile(selected);
     document.querySelector(".vision-explorer")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
@@ -269,7 +266,7 @@ export function VisionPage() {
       </div>
 
       <nav className="poi-tabs" aria-label="Punto de inspección">
-        {ids.map((id) => {
+        {catalogIds.map((id) => {
           const last = [...all].reverse().find((e) => payloadOf(e).poi === id);
           return (
             <button key={id} className={id === current ? "active" : ""} onClick={() => choosePoi(id)}>
@@ -283,13 +280,6 @@ export function VisionPage() {
 
       <section className="vision-explorer">
         <Card title={`Catálogo · ${current ?? "—"}`} aside={<span className="muted small">{catalogFiles.length} casos</span>} className="catalog-card">
-          <div className="catalog-origin" aria-label="Filtrar por procedencia">
-            {(["all", "real", "generated"] as Origin[]).map((value) => (
-              <button key={value} className={`btn small ${origin === value ? "primary" : ""}`} onClick={() => setOrigin(value)}>
-                {value === "all" ? "Todas" : value === "real" ? "Reales" : "Generadas"}
-              </button>
-            ))}
-          </div>
           <div className="catalog-cases">
             {catalogFiles.map((candidate) => {
               const item = live.credits[candidate];
@@ -300,7 +290,7 @@ export function VisionPage() {
                   <span className="catalog-case-body">
                     <b>{item.condicion}</b>
                     <span>{item.valor || "ilegible"}{item.valor && cfg?.expect ? ` ${cfg.expect.unit}` : ""}</span>
-                    <span className="muted">{isReal(candidate, live) ? "Real" : "Generada"}{analyzed ? " · analizada" : ""}</span>
+                    {analyzed && <span className="muted">analizada</span>}
                   </span>
                 </button>
               );
@@ -354,7 +344,7 @@ export function VisionPage() {
 
       <Card title="Últimas lecturas">
         <div className="strip">
-          {verdicts.slice(-18).reverse().map(({ e, v }, index) => {
+          {verdicts.filter(({ e }) => { const f = fileOf(live, e); return !f || isReal(f, live); }).slice(-18).reverse().map(({ e, v }, index) => {
             const item = payloadOf(e);
             return (
               <figure key={String(item.inspection_id ?? `${e.topic}${e.t}${index}`)} className={v.hit === false ? "bad" : qualityTone(item.quality)}>
