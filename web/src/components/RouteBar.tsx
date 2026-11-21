@@ -7,20 +7,27 @@ import { T } from "../topics";
 
 const HALF = 4; // stops placed on each side, for the slide; only one each side is seen
 
-/** Where a point falls along the route, in metres from its start, and the route's length. */
-function along(route: Point[], [px, py]: Point): { s: number; length: number } {
-  let best = { d: Infinity, s: 0 };
+/** Where a point falls along the route, in metres from its start, and the route's length.
+ * The route crosses itself near the base (the way out and the way back share the same
+ * corridor), so a point may fall in several places: ``towards`` picks the one from which
+ * that place on the route is closest going forwards. */
+function along(route: Point[], [px, py]: Point, towards?: number): { s: number; length: number } {
+  const hits: { d: number; s: number }[] = [];
   let s = 0;
   for (let i = 0; i < route.length; i++) {
     const [ax, ay] = route[i];
     const [bx, by] = route[(i + 1) % route.length];
     const len = Math.hypot(bx - ax, by - ay);
     const t = len ? Math.max(0, Math.min(1, ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / (len * len))) : 0;
-    const d = Math.hypot(ax + t * (bx - ax) - px, ay + t * (by - ay) - py);
-    if (d < best.d) best = { d, s: s + t * len };
+    hits.push({ d: Math.hypot(ax + t * (bx - ax) - px, ay + t * (by - ay) - py), s: s + t * len });
     s += len;
   }
-  return { s: best.s, length: s };
+  const length = s;
+  const best = Math.min(...hits.map((h) => h.d));
+  const near = hits.filter((h) => h.d <= best + 0.05);
+  if (towards === undefined) return { s: near[0].s, length };
+  const ahead = (h: { s: number }) => (towards - h.s + length) % length;
+  return { s: near.reduce((a, b) => (ahead(b) < ahead(a) ? b : a)).s, length };
 }
 
 /** The way from where the robot is to a point on the route: forwards, or the shorter
@@ -34,8 +41,8 @@ export function wayTo(route: Point[], from: Point, to: Point, shortest: boolean)
     const [bx, by] = route[(i + 1) % route.length];
     total += Math.hypot(bx - ax, by - ay);
   }
-  const a = along(route, from).s;
   const b = along(route, to).s;
+  const a = along(route, from, shortest ? undefined : b).s;
   const forward = (b - a + total) % total;
   const backward = total - forward;
   const ahead = !shortest || forward <= backward;
@@ -66,9 +73,9 @@ export function RouteBar({ plant }: { plant: Plant }) {
   const next = target >= 0 ? target : here >= 0 ? here : 0;
   const prev = (next - 1 + n) % n;
 
-  const { s: sRobot, length } = along(plant.ruta, robot);
   const sPrev = along(plant.ruta, stops[prev].punto).s;
   const sNext = along(plant.ruta, stops[next].punto).s;
+  const { s: sRobot, length } = along(plant.ruta, robot, sNext);
   const span = (sNext - sPrev + length) % length || length;
   const left = target >= 0 ? (sNext - sRobot + length) % length : 0;
   const progress = target >= 0 ? Math.max(0, Math.min(1, 1 - left / span)) : 1;

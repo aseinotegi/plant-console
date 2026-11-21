@@ -1,4 +1,6 @@
+import { show } from "../format";
 import { type Entry, payloadOf, useLive } from "../live";
+import { coordinates } from "./InspectionImage";
 
 /** The photo behind an inspection, with its author and licence when it is a real one. */
 export function Photo({ entry, small = false }: { entry: Entry | undefined; small?: boolean }) {
@@ -11,9 +13,22 @@ export function Photo({ entry, small = false }: { entry: Entry | undefined; smal
   const real = credit && credit.licencia.startsWith("CC");
   // Generated images are not shown anywhere, only real photos.
   if (credit && !real) return <div className={`photo noimg ${small ? "small" : ""}`}>Foto no disponible todavía</div>;
+  const box = coordinates(p.bbox_2d);
   return (
     <figure className={`photo-frame ${small ? "small" : ""}`}>
-      <img className="photo" src={url} alt={`Foto de ${String(p.poi ?? "")}`} loading="lazy" />
+      {box && !small ? (
+        <div className="photo-boxed">
+          <img className="photo natural" src={url} alt={`Foto de ${String(p.poi ?? "")}`} loading="lazy" />
+          <div
+            className={`bounding-box ${p.quality === "good" ? "ok" : "warn"}`}
+            style={{ left: `${box[0] / 10}%`, top: `${box[1] / 10}%`, width: `${(box[2] - box[0]) / 10}%`, height: `${(box[3] - box[1]) / 10}%` }}
+          >
+            <span>{`${show(p.poi)} · ${p.value === null || p.value === undefined ? "sin lectura" : `${show(p.value)}${p.unit ? ` ${show(p.unit)}` : ""}`}`}</span>
+          </div>
+        </div>
+      ) : (
+        <img className="photo" src={url} alt={`Foto de ${String(p.poi ?? "")}`} loading="lazy" />
+      )}
       {!small && (
         <figcaption>
           {real ? (

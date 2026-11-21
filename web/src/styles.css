@@ -645,3 +645,7 @@ table.services .num { text-align: right; white-space: nowrap; }
 .way-ahead.mission { stroke: var(--alarm); }
 @keyframes way-ahead { to { stroke-dashoffset: -1.05; } }
 @media (prefers-reduced-motion: reduce) { .way-ahead { animation: none; } }
+.photo-boxed { position: relative; border-radius: 6px; overflow: hidden; background: #000; }
+.photo.natural { aspect-ratio: auto; object-fit: fill; border-radius: 0; }
+.photo-boxed .bounding-box { border-width: 2px; }
+.photo-boxed .bounding-box span { font-size: 11px; }

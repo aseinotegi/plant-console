@@ -2,7 +2,7 @@ import { useState } from "react";
 import { qualityLabel, show } from "../format";
 import { type Entry, payloadOf } from "../live";
 
-function coordinates(value: unknown): number[] | null {
+export function coordinates(value: unknown): number[] | null {
   if (!Array.isArray(value) || value.length !== 4) return null;
   if (!value.every((v) => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1000)) return null;
   if (value[0] >= value[2] || value[1] >= value[3]) return null;
