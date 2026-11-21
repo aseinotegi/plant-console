@@ -599,7 +599,7 @@ table.services .num { text-align: right; white-space: nowrap; }
 .arch-modes { margin-left: auto; margin-right: 12px; }
 .arch .svc.demo rect { stroke-dasharray: 4 3; }
 .arch .svc.dim { opacity: 0.35; }
-.arch-card.lectura .link, .arch-card.escritura .link { opacity: 0.25; }
+.arch.lectura .link, .arch.escritura .link { opacity: 0.25; }
 .arch .flow { stroke-width: 3; stroke-dasharray: 8 8; stroke-linecap: round; animation: arch-flow 0.9s linear infinite; }
 .arch .flow.lectura { stroke: var(--accent); }
 .arch .flow.escritura { stroke: var(--alarm); }
@@ -609,3 +609,17 @@ table.services .num { text-align: right; white-space: nowrap; }
 .arch .svc.st-degradado rect { stroke: var(--alarm); stroke-width: 1.6; }
 .arch .svc.st-caido rect { stroke: var(--bad); stroke-width: 2; }
 .arch .state.ok { fill: var(--ok); }
+.home-page { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.home-page .card-head h2 a { color: inherit; text-decoration: none; }
+.home-page .card-head h2 a:hover { color: var(--accent); }
+.home-arch .card-head > :last-child { display: flex; align-items: center; gap: 10px; }
+.home-tiles { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+.app-tile { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; color: var(--ink); text-decoration: none; }
+.app-tile:hover, .app-tile:focus-visible { border-color: var(--accent); }
+.app-tile.bad { border-color: var(--bad); }
+.app-value { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-label { color: var(--soft); font-size: 12.5px; }
+@media (max-width: 1100px) {
+  .home-page { grid-template-columns: 1fr; }
+  .home-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

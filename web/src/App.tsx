@@ -4,6 +4,7 @@ import { Tour, useTour } from "./components/Tour";
 import { useLive } from "./live";
 import { ArchitecturePage } from "./pages/ArchitecturePage";
 import { HistoryPage } from "./pages/HistoryPage";
+import { HomePage } from "./pages/HomePage";
 import { MqttPage } from "./pages/MqttPage";
 import { PlcPage } from "./pages/PlcPage";
 import { RobotPage } from "./pages/RobotPage";
@@ -13,7 +14,8 @@ import { UnsPage } from "./pages/UnsPage";
 import { VisionPage } from "./pages/VisionPage";
 
 const PAGES = [
-  { path: "", label: "Planta", page: RobotPage },
+  { path: "", label: "Inicio", page: HomePage },
+  { path: "planta", label: "Planta", page: RobotPage },
   { path: "plc", label: "PLC", page: PlcPage },
   { path: "vision", label: "Visión", page: VisionPage },
   { path: "reglas", label: "Reglas", page: RulesPage },

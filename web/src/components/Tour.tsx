@@ -14,24 +14,24 @@ interface Step {
 
 const STEPS: Step[] = [
   {
-    target: "mapa",
-    title: "Una planta en marcha",
-    text: "No es una animación: robot-01 hace su ronda de verdad y fotografía manómetros y extintores. Pulsa cualquier equipo para ver su dato.",
+    target: "arquitectura",
+    title: "Cómo está montada",
+    text: "El PLC y el robot en campo, detrás del firewall; el UNS en el centro; arriba, esta consola. Lectura y Escritura enseñan por dónde va cada dato.",
   },
   {
-    target: "linea",
-    title: "Dos formas de medir lo mismo",
-    text: "PI-104 lo lee una IA en la foto del robot; PT-104 llega del PLC. Si los dos pasan de 6 bar, una regla manda al robot a cerrar la válvula XV-104.",
+    target: "mapa",
+    title: "Una planta en marcha",
+    text: "No es una animación: el robot hace su ronda y fotografía manómetros y extintores. Una IA los lee y el PLC confirma la presión.",
   },
   {
     target: "sobrepresion",
     title: "Pruébalo tú",
-    text: "Provoca una sobrepresión y mira el plano: la presión sube, el robot fotografía el manómetro, la regla salta y el robot cierra la válvula.",
+    text: "Provoca una sobrepresión: la presión sube, salta la regla y el robot va a cerrar la válvula.",
   },
   {
-    target: "pestanas",
+    target: "apps",
     title: "Cada pieza, por dentro",
-    text: "Visión enseña lo que vio la IA en cada foto, Reglas lo que se decide, UNS y MQTT los datos tal como viajan, y Arquitectura cómo está montado todo.",
+    text: "Cada ventana abre su aplicación.",
   },
   {
     target: "ayuda",
