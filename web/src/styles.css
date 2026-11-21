@@ -246,7 +246,6 @@ main { padding: 18px 20px 28px; max-width: 1560px; margin: 0 auto; }
 .mission-ring { fill: none; stroke: var(--alarm); stroke-width: 0.14; stroke-dasharray: 0.5 0.3; }
 .select-box { fill: none; stroke: var(--accent); stroke-width: 0.08; stroke-dasharray: 0.3 0.2; }
 
-.trail line { stroke: var(--accent); stroke-width: 0.12; stroke-linecap: round; }
 .fov { fill: rgba(34, 211, 238, 0.12); stroke: rgba(34, 211, 238, 0.45); stroke-width: 0.05; }
 .robot { transition: transform 0.22s linear; }
 .robot .body { fill: var(--accent); stroke: var(--bg); stroke-width: 0.08; }
@@ -630,15 +629,19 @@ table.services .num { text-align: right; white-space: nowrap; }
 .target-mark.mission .target-ring, .target-mark.mission .target-pulse { stroke: var(--alarm); }
 .target-mark.mission rect { fill: var(--alarm); }
 @keyframes target-pulse { 0% { opacity: 0.8; transform: scale(1); } 100% { opacity: 0; transform: scale(2.2); } }
-.route-wheel { display: block; width: 100%; max-width: 760px; margin: 4px auto 0; }
-.wheel-track { fill: none; stroke: var(--line); stroke-width: 2; }
-.wheel-done { fill: none; stroke: var(--ink); stroke-width: 2.5; transition: d 1s linear; }
-.wheel-stop { transition: transform 0.9s ease, opacity 0.9s ease; }
-.wheel-stop circle { fill: var(--surface); stroke: var(--soft); stroke-width: 2; }
-.wheel-stop.past circle { fill: var(--ink); stroke: var(--ink); }
-.wheel-stop.next circle { fill: var(--bg); stroke: var(--accent); stroke-width: 3; }
-.wheel-stop text { fill: var(--soft); font-size: 18px; font-weight: 600; letter-spacing: 0.04em; text-anchor: middle; }
-.wheel-stop.past text { fill: var(--ink); }
-.wheel-stop.next text { fill: var(--accent); }
-.wheel-now { stroke: var(--ink); stroke-width: 2; }
-@media (prefers-reduced-motion: reduce) { .target-mark .target-pulse { animation: none; } .wheel-stop { transition: none; } }
+.route-frame { fill: rgba(6, 13, 27, 0.72); stroke: var(--line); stroke-width: 0.06; }
+.route-track { stroke: var(--line); stroke-width: 0.12; }
+.route-done { stroke: var(--ink); stroke-width: 0.14; }
+.route-stop { transition: transform 0.9s ease, opacity 0.9s ease; }
+.route-stop circle { fill: var(--surface); stroke: var(--soft); stroke-width: 0.1; }
+.route-stop.past circle { fill: var(--ink); stroke: var(--ink); }
+.route-stop.next circle { fill: var(--bg); stroke: var(--accent); stroke-width: 0.14; }
+.route-stop text { fill: var(--soft); font-size: 0.9px; font-weight: 600; text-anchor: middle; }
+.route-stop.past text { fill: var(--ink); }
+.route-stop.next text { fill: var(--accent); }
+.route-now { stroke: var(--ink); stroke-width: 0.1; }
+@media (prefers-reduced-motion: reduce) { .target-mark .target-pulse { animation: none; } .route-stop { transition: none; } }
+.way-ahead { fill: none; stroke: var(--accent); stroke-width: 0.22; stroke-dasharray: 0.6 0.45; stroke-linecap: round; stroke-linejoin: round; opacity: 0.85; animation: way-ahead 1.2s linear infinite; }
+.way-ahead.mission { stroke: var(--alarm); }
+@keyframes way-ahead { to { stroke-dashoffset: -1.05; } }
+@media (prefers-reduced-motion: reduce) { .way-ahead { animation: none; } }

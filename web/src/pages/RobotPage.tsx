@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Badge, Card, Row } from "../components/bits";
 import { DisturbanceButton } from "../components/Disturbance";
 import { PlantMap } from "../components/PlantMap";
-import { RouteWheel } from "../components/RouteWheel";
 import { Photo } from "../components/Photo";
 import { ROBOT_STATE, ago, clock, dec, describe, qualityLabel, qualityTone, reasonLabel, show } from "../format";
 import { type Entry, payloadOf, stamp, useLive, useNow } from "../live";
@@ -27,10 +26,7 @@ export function RobotPage() {
           <h1>{plant?.nombre ?? "Planta"}</h1>
         </header>
         {plant ? (
-          <>
-            <PlantMap plant={plant} selected={selected} onSelect={setSelected} />
-            <RouteWheel plant={plant} />
-          </>
+          <PlantMap plant={plant} selected={selected} onSelect={setSelected} />
         ) : (
           <p className="muted pad">Esperando el mapa del robot…</p>
         )}

@@ -4,6 +4,7 @@
 // where it says it is, every instrument shows its last value.
 
 import { useRef } from "react";
+import { RouteBar, wayTo } from "./RouteBar";
 import { dec } from "../format";
 import { type Entry, payloadOf, useLive } from "../live";
 import type { Device, Plant, Point, Zone } from "../plant";
@@ -94,9 +95,10 @@ export function PlantMap({ plant, selected, onSelect }: Props) {
         </g>
       ))}
 
+      <RouteBar plant={plant} />
       <TargetMark plant={plant} target={target} mission={!!mission} />
 
-      <Trail points={live.trail} />
+      <WayAhead plant={plant} from={[x, y]} target={target} mission={!!mission} />
       {seen && <polygon className="fov" points={fov([x, y], [seen.x, seen.y])} />}
 
       <g className={`robot ${state}`} style={{ transform: `translate(${x}px, ${y}px) rotate(${heading}deg)` }}>
@@ -258,22 +260,12 @@ function TargetMark({ plant, target, mission }: { plant: Plant; target: string |
   );
 }
 
-function Trail({ points }: { points: [number, number][] }) {
-  if (points.length < 2) return null;
-  return (
-    <g className="trail">
-      {points.slice(1).map((p, i) => (
-        <line
-          key={i}
-          x1={points[i][0]}
-          y1={points[i][1]}
-          x2={p[0]}
-          y2={p[1]}
-          style={{ opacity: (i + 1) / points.length }}
-        />
-      ))}
-    </g>
-  );
+/** The way the robot still has to walk to its next stop. */
+function WayAhead({ plant, from, target, mission }: { plant: Plant; from: Point; target: string | null; mission: boolean }) {
+  const stop = plant.paradas.find((s) => s.equipo === target);
+  if (!stop) return null;
+  const points = wayTo(plant.ruta, from, stop.punto, mission);
+  return <polyline className={`way-ahead ${mission ? "mission" : ""}`} points={points.map((p) => p.join(",")).join(" ")} />;
 }
 
 function ScaleBar({ y }: { y: number }) {
