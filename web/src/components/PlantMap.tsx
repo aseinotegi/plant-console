@@ -94,6 +94,8 @@ export function PlantMap({ plant, selected, onSelect }: Props) {
         </g>
       ))}
 
+      <TargetMark plant={plant} target={target} mission={!!mission} />
+
       <Trail points={live.trail} />
       {seen && <polygon className="fov" points={fov([x, y], [seen.x, seen.y])} />}
 
@@ -234,6 +236,24 @@ function StopMark({ point: [x, y], action, next }: { point: Point; action: strin
       {action === "foto" && <rect x={-0.22} y={-0.15} width={0.44} height={0.3} rx={0.05} className="glyph" />}
       {action === "valvula" && <path d="M-0.25,-0.18 L0.25,0.18 L0.25,-0.18 L-0.25,0.18 Z" className="glyph" />}
       {action === "carga" && <path d="M0.06,-0.28 L-0.14,0.04 L0.02,0.04 L-0.06,0.28 L0.16,-0.06 L0,-0.06 Z" className="glyph" />}
+    </g>
+  );
+}
+
+/** Where the robot is going: a ring on the walkway, and the name of the point. */
+function TargetMark({ plant, target, mission }: { plant: Plant; target: string | null; mission: boolean }) {
+  const stop = plant.paradas.find((s) => s.equipo === target);
+  if (!stop || !target) return null;
+  const [x, y] = stop.punto;
+  const w = target.length * 0.82 + 1.4;
+  return (
+    <g className={`target-mark ${mission ? "mission" : ""}`} transform={`translate(${x},${y})`} pointerEvents="none">
+      <circle r={1.2} className="target-ring" />
+      <circle r={1.2} className="target-pulse" />
+      <g transform="translate(0,-2.9)">
+        <rect x={-w / 2} y={-0.85} width={w} height={1.7} rx={0.35} />
+        <text y={0.45}>{target}</text>
+      </g>
     </g>
   );
 }

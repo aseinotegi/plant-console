@@ -623,3 +623,24 @@ table.services .num { text-align: right; white-space: nowrap; }
   .home-page { grid-template-columns: 1fr; }
   .home-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+.target-mark .target-ring { fill: none; stroke: var(--accent); stroke-width: 0.16; }
+.target-mark .target-pulse { fill: none; stroke: var(--accent); stroke-width: 0.12; transform-origin: 0 0; animation: target-pulse 1.8s ease-out infinite; }
+.target-mark rect { fill: var(--accent); }
+.target-mark text { fill: var(--bg); font-size: 1.15px; font-weight: 700; text-anchor: middle; }
+.target-mark.mission .target-ring, .target-mark.mission .target-pulse { stroke: var(--alarm); }
+.target-mark.mission rect { fill: var(--alarm); }
+@keyframes target-pulse { 0% { opacity: 0.8; transform: scale(1); } 100% { opacity: 0; transform: scale(2.2); } }
+.route-wheel { display: block; width: 100%; max-height: 150px; margin-top: 6px; }
+.wheel-track { fill: none; stroke: var(--line); stroke-width: 2; }
+.wheel-done { fill: none; stroke: var(--ink); stroke-width: 2.5; transition: d 1s linear; }
+.wheel-stop { transition: transform 0.9s ease, opacity 0.9s ease; }
+.wheel-stop circle { fill: var(--surface); stroke: var(--soft); stroke-width: 2; }
+.wheel-stop.past circle { fill: var(--ink); stroke: var(--ink); }
+.wheel-stop.next circle { fill: var(--bg); stroke: var(--accent); stroke-width: 3; }
+.wheel-stop text { fill: var(--soft); font-size: 14px; font-weight: 600; letter-spacing: 0.04em; text-anchor: middle; }
+.wheel-stop.past text { fill: var(--ink); }
+.wheel-stop.next text { fill: var(--accent); }
+.wheel-now { stroke: var(--ink); stroke-width: 2; }
+.wheel-target { fill: var(--ink); font-size: 30px; font-weight: 650; text-anchor: middle; font-variant-numeric: tabular-nums; }
+.wheel-distance { fill: var(--soft); font-size: 15px; text-anchor: middle; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .target-mark .target-pulse { animation: none; } .wheel-stop { transition: none; } }
