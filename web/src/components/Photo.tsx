@@ -33,7 +33,7 @@ export function Photo({ entry, small = false }: { entry: Entry | undefined; smal
         <figcaption>
           {real ? (
             <>
-              Foto real de{" "}
+              {credit.condicion === "retocada" ? "Foto de" : "Foto real de"}{" "}
               <a href={credit.fuente} target="_blank" rel="noreferrer">
                 {credit.autor}
               </a>
