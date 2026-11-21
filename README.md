@@ -77,9 +77,10 @@ Visitors see everything but cannot change the plant's logic or spend its model q
 * rules are read-only and the security probes are off (403);
 * the disturbance button waits `DISTURB_COOLDOWN_S` (180) between any two uses, and allows
   `DISTURB_PER_VISITOR_HOUR` (3) per visitor;
-* vision trials: `TRIALS_PER_VISITOR_HOUR` (6) per visitor, `TRIALS_PER_HOUR` (60) overall,
-  `TRIALS_AT_ONCE` (1); a catalog photo already analyzed is answered from memory for
-  `TRIAL_CACHE_S` (6 h); new images only with `UPLOADS=true`;
+* vision trials: `TRIALS_PER_VISITOR_HOUR` (6) per visitor, `TRIALS_PER_HOUR` (60) and
+  `TRIALS_PER_DAY` (300) overall, `TRIALS_AT_ONCE` (1); a catalog photo already analyzed is
+  answered from memory for `TRIAL_CACHE_S` (6 h); new images only with `UPLOADS=true`, and
+  a visitor's photo is never kept nor passed on to other browsers;
 * request bodies are capped, the API docs are off, and pages carry a strict
   Content-Security-Policy (frames only from `GRAFANA_URL`).
 

@@ -20,7 +20,8 @@ The console's MQTT user can only read, plus rules, disturbance and trial request
 only: MQTT_HOST, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD, SITE, ROBOT_URL,
 GRAFANA_URL, WEB_DIR, STREAM_TOPICS, SERVICES_FILE, MAX_SOCKETS, and for the public demo
 SHOWROOM with its limits (see showroom.py): DISTURB_COOLDOWN_S, DISTURB_PER_VISITOR_HOUR,
-TRIALS_PER_VISITOR_HOUR, TRIALS_PER_HOUR, TRIALS_AT_ONCE, TRIAL_CACHE_S, UPLOADS.
+TRIALS_PER_VISITOR_HOUR, TRIALS_PER_HOUR, TRIALS_PER_DAY, TRIALS_AT_ONCE, TRIAL_CACHE_S,
+UPLOADS.
 """
 
 from __future__ import annotations
@@ -77,6 +78,7 @@ class Settings:
         self.disturb_per_visitor = int(env.get("DISTURB_PER_VISITOR_HOUR", "3" if on else "0"))
         self.trials_per_visitor = int(env.get("TRIALS_PER_VISITOR_HOUR", "6" if on else "0"))
         self.trials_per_hour = int(env.get("TRIALS_PER_HOUR", "60" if on else "0"))
+        self.trials_per_day = int(env.get("TRIALS_PER_DAY", "300" if on else "0"))
         self.trials_at_once = int(env.get("TRIALS_AT_ONCE", "1" if on else "0"))
         self.trial_cache_s = float(env.get("TRIAL_CACHE_S", "21600" if on else "0"))
         self.uploads = truthy(env.get("UPLOADS", "false" if on else "true"))
@@ -175,7 +177,10 @@ def create_app(
     app = FastAPI(title="plant-console", lifespan=lifespan, **docs)
     app.state.live = live
     disturb_limit = Limiter(settings.disturb_per_visitor, 3600, settings.disturb_cooldown_s)
-    trial_limit = Limiter(settings.trials_per_visitor, 3600, overall=settings.trials_per_hour)
+    trial_limits = (
+        Limiter(settings.trials_per_visitor, 3600, overall=settings.trials_per_hour),
+        Limiter(window_s=86400, overall=settings.trials_per_day),
+    )
     trial_answers = Memo(settings.trial_cache_s)
     running = {"trials": 0, "sockets": 0}
     max_body = MAX_BODY_BYTES if settings.uploads else SMALL_BODY_BYTES
@@ -197,9 +202,12 @@ def create_app(
         if settings.showroom:
             raise HTTPException(403, f"{what} no está disponible en la demo pública")
 
-    def ration(limiter: Limiter, request: Request, what: str) -> JSONResponse | None:
-        wait = limiter.wait(visitor(request))
+    def ration(limiters: tuple[Limiter, ...], request: Request, what: str) -> JSONResponse | None:
+        who = visitor(request)
+        wait = max(limiter.wait(who, take=False) for limiter in limiters)
         if wait <= 0:
+            for limiter in limiters:
+                limiter.wait(who)
             return None
         detail = f"{what} disponible de nuevo en {int(wait) + 1} s"
         body = {"ok": False, "detail": detail, "retry_after_s": wait}
@@ -225,6 +233,7 @@ def create_app(
             "showroom": settings.showroom,
             "uploads": settings.uploads,
             "disturb_cooldown_s": settings.disturb_cooldown_s,
+            "trials_per_visitor_hour": settings.trials_per_visitor,
         }
 
     services = load_services(settings.services_file)
@@ -329,7 +338,7 @@ def create_app(
         if settings.trials_at_once and running["trials"] >= settings.trials_at_once:
             busy = {"ok": False, "detail": "El inspector está con otro análisis: prueba en unos segundos"}
             return JSONResponse(busy, status_code=429, headers={"Retry-After": "10"})
-        if limited := ration(trial_limit, request, "El análisis"):
+        if limited := ration(trial_limits, request, "El análisis"):
             return limited
 
         captured = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
@@ -372,7 +381,7 @@ def create_app(
 
     @app.post("/api/escenario/perturbacion")
     async def perturbacion(http: Request) -> Any:
-        if limited := ration(disturb_limit, http, "La perturbación"):
+        if limited := ration((disturb_limit,), http, "La perturbación"):
             return limited
         request = uuid.uuid4().hex
         send(settings.disturb_topic, {"value": "provocar", "source": "console", "request": request})

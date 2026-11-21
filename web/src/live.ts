@@ -79,6 +79,7 @@ class LiveStore {
   grafanaUrl = "";
   showroom = false; // the public demo: read-only rules, no probes
   uploads = true;
+  trialsPerHour = 0; // per visitor, 0: no limit
   credits: Record<string, PhotoCredit> = {};
   rate = 0; // messages per second
   version = 0;
@@ -118,6 +119,7 @@ class LiveStore {
       this.grafanaUrl = body.grafana_url || `${location.protocol}//${location.hostname}:3000`;
       this.showroom = body.showroom === true;
       this.uploads = body.uploads !== false;
+      this.trialsPerHour = Number(body.trials_per_visitor_hour) || 0;
     } catch {
       this.broker = false;
     }

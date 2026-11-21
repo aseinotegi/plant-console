@@ -297,7 +297,15 @@ export function VisionPage() {
       </section>
 
       {live.uploads && <Card title="Probar una imagen nueva" className="upload-card">
-        <p className="muted">La imagen se envía como ensayo. No cambia valores, alarmas ni órdenes de la planta.</p>
+        <p className="muted">
+          Sube la foto de un manómetro o de un extintor. La lee {String(config.trial_model ?? model)}; no cambia nada de la planta.
+          {live.trialsPerHour > 0 && ` Hasta ${live.trialsPerHour} análisis por hora.`}
+        </p>
+        {String(config.trial_provider ?? config.provider) === "gemini" && (
+          <p className="muted small">
+            La imagen se envía a Google (Gemini). En el plan gratuito, Google puede usarla para mejorar sus productos: no subas fotos con personas ni datos privados. Aquí no se guarda.
+          </p>
+        )}
         <div className="upload-controls">
           <input type="file" accept="image/jpeg,image/png" onChange={chooseUpload} />
           <label>Punto de inspección

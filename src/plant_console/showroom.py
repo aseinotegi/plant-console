@@ -53,8 +53,8 @@ class Limiter:
         while uses and uses[0] <= now - self.window_s:
             uses.popleft()
 
-    def wait(self, visitor: str) -> float:
-        """Seconds this visitor has to wait. When it is zero the use is counted."""
+    def wait(self, visitor: str, take: bool = True) -> float:
+        """Seconds this visitor has to wait. When it is zero and ``take``, the use is counted."""
         now = self.clock()
         waits = []
         if self.cooldown_s and self._last is not None:
@@ -71,7 +71,7 @@ class Limiter:
             if len(uses) >= self.per_visitor:
                 waits.append(uses[0] + self.window_s - now)
         wait = max([0.0, *waits])
-        if wait <= 0:
+        if wait <= 0 and take:
             self._last = now
             if self.overall:
                 self._all.append(now)

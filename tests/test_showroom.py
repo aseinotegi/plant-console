@@ -1,4 +1,5 @@
 import base64
+import json
 
 import httpx
 import pytest
@@ -145,3 +146,22 @@ def test_memo_forgets_after_its_time():
     now[0] = 11
     assert memo.get("k") is None
     assert Memo(ttl_s=0).get("k") is None
+
+
+def test_uploads_when_enabled_are_rationed_too_and_never_kept():
+    app, live, plant = open_showroom(UPLOADS="true", TRIALS_PER_DAY="2")
+    with TestClient(app) as client:
+        robot = httpx.MockTransport(fake_robot)
+        app.state.robot = httpx.AsyncClient(base_url="http://robot", transport=robot)
+        configure_vision(live)
+        image = base64.b64encode(b"\xff\xd8" + b"x" * 5000).decode()
+        upload = {"poi": "PI-104", "image_b64": image, "mime": "image/jpeg"}
+        codes = [
+            client.post("/api/vision/ensayos", json=upload, headers={"CF-Connecting-IP": f"203.0.113.{i}"})
+            for i in range(3)
+        ]
+        assert [c.status_code for c in codes] == [200, 200, 429]  # two a day, whoever sends them
+        assert "image_b64" in plant.sent[0][1]  # the inspector gets the photo...
+        live.add("planta1/ensayos/vision/foto", json.dumps(plant.sent[0][1]).encode())
+        kept = json.dumps(client.get("/api/uns").json())
+        assert image[:200] not in kept and '"image_b64_bytes"' in kept  # ...other visitors never do
