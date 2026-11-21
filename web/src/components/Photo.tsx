@@ -9,6 +9,8 @@ export function Photo({ entry, small = false }: { entry: Entry | undefined; smal
   const file = url.split("/").pop() ?? "";
   const credit = live.credits[file];
   const real = credit && credit.licencia.startsWith("CC");
+  // Generated images are not shown anywhere, only real photos.
+  if (credit && !real) return <div className={`photo noimg ${small ? "small" : ""}`}>Foto no disponible todavía</div>;
   return (
     <figure className={`photo-frame ${small ? "small" : ""}`}>
       <img className="photo" src={url} alt={`Foto de ${String(p.poi ?? "")}`} loading="lazy" />
