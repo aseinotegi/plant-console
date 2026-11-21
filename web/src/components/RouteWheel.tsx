@@ -1,16 +1,16 @@
-// The robot's round as a wheel: the stops it has done on the left, the next one in the
-// middle, the ones to come on the right, turning as it goes.
+// The robot's round as a small wheel: the stop it has done, the one it is heading to,
+// the one after; turning a place each time it gets somewhere.
 
-import { dec } from "../format";
 import { payloadOf, useLive } from "../live";
 import type { Plant, Point } from "../plant";
 import { T } from "../topics";
 
-const STEP = 5; // degrees between two stops on the wheel
-const R = 1600;
+const STEP = 6; // degrees between two stops on the wheel
+const R = 3000;
 const CX = 500;
-const TOP = 40;
-const SIDE = 4; // stops on each side of the next one; the outermost fade out
+const TOP = 30;
+const HALF = 4; // stops placed on each side, for the turn; only one each side is seen
+const EDGE = 1.6; // where the track ends
 
 const at = (offset: number): Point => {
   const a = (offset * STEP * Math.PI) / 180;
@@ -61,14 +61,14 @@ export function RouteWheel({ plant }: { plant: Plant }) {
   const [nx, ny] = at(now);
 
   return (
-    <svg className="route-wheel" viewBox="0 0 1000 150" role="img" aria-label={`Ronda del robot: siguiente parada ${stops[next].equipo}`}>
-      <path d={arc(-SIDE, SIDE)} className="wheel-track" />
-      <path d={arc(-SIDE, now)} className="wheel-done" />
+    <svg className="route-wheel" viewBox="0 0 1000 80" role="img" aria-label={`Ronda del robot: siguiente parada ${stops[next].equipo}`}>
+      <path d={arc(-EDGE, EDGE)} className="wheel-track" />
+      <path d={arc(-EDGE, now)} className="wheel-done" />
       {stops.map((stop, i) => {
-        const offset = ((i - next + n + SIDE) % n) - SIDE;
+        const offset = ((i - next + n + HALF) % n) - HALF;
         const [x, y] = at(offset);
         const state = offset < 0 ? "past" : offset === 0 ? "next" : "future";
-        const far = Math.abs(offset) >= SIDE;
+        const far = Math.abs(offset) > 1;
         return (
           <g key={stop.equipo} className={`wheel-stop ${state}`} style={{ transform: `translate(${x}px, ${y}px)`, opacity: far ? 0 : 1 }}>
             <circle r={offset === 0 ? 7 : 5} />
@@ -77,12 +77,6 @@ export function RouteWheel({ plant }: { plant: Plant }) {
         );
       })}
       <line x1={nx} y1={ny - 9} x2={nx} y2={ny + 9} className="wheel-now" />
-      <text x={CX} y={TOP + 62} className="wheel-target">
-        {stops[next].equipo}
-      </text>
-      <text x={CX} y={TOP + 86} className="wheel-distance">
-        {target >= 0 ? `${dec(left, 0)} m` : String(pose.value ?? "")}
-      </text>
     </svg>
   );
 }
