@@ -35,6 +35,13 @@ export function PlcPage() {
   return (
     <div className="plc-page">
       <Card title="PLC-1, Siemens S7 simulado" aside={<Badge tone={anyAlarm ? "bad" : "ok"}>{anyAlarm ? "Con alarmas" : "Sin alarmas"}</Badge>}>
+        <div className="chain" aria-label="Del PLC al broker">
+          <div className="node"><b>PLC-1</b><span>servidor S7 · python-snap7 · DB1</span></div>
+          <div className="link">S7comm · cada 200 ms →</div>
+          <div className="node"><b>plc-mqtt-gateway</b><span>cliente S7 · publica lo que cambia</span></div>
+          <div className="link">MQTT · QoS 1 →</div>
+          <div className="node"><b>Mosquitto</b><span>UNS planta1/…</span></div>
+        </div>
         <table className="tags">
           <thead>
             <tr>
