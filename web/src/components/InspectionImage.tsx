@@ -9,6 +9,26 @@ export function coordinates(value: unknown): number[] | null {
   return value;
 }
 
+/** The other objects of the same kind the model located but did not inspect. */
+export function others(value: unknown): number[][] {
+  return Array.isArray(value) ? value.map(coordinates).filter((box): box is number[] => box !== null) : [];
+}
+
+export function OtherBoxes({ boxes }: { boxes: number[][] }) {
+  return (
+    <>
+      {boxes.map((box) => (
+        <div
+          key={box.join(",")}
+          className="bounding-box other"
+          title="Localizado, no inspeccionado"
+          style={{ left: `${box[0] / 10}%`, top: `${box[1] / 10}%`, width: `${(box[2] - box[0]) / 10}%`, height: `${(box[3] - box[1]) / 10}%` }}
+        />
+      ))}
+    </>
+  );
+}
+
 export function InspectionImage({ entry, file, url }: { entry: Entry | undefined; file: string; url: string }) {
   const [zoom, setZoom] = useState(1);
   const p = payloadOf(entry);
@@ -34,6 +54,7 @@ export function InspectionImage({ entry, file, url }: { entry: Entry | undefined
       <div className="vision-image-viewport">
         <div className="vision-image-canvas" style={{ width: `${zoom * 100}%` }}>
           <img src={url} alt={`Caso ${file}`} />
+          {box && <OtherBoxes boxes={others(p.other_boxes)} />}
           {box && (
             <div
               className={`bounding-box ${p.quality === "good" ? "ok" : "warn"}`}

@@ -519,6 +519,7 @@ table.services .num { text-align: right; white-space: nowrap; }
 .bounding-box.ok { border-color: var(--accent); }
 .bounding-box span { position: absolute; left: -2px; top: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--alarm); color: var(--bg); padding: 2px 6px; font: 600 12px/1.5 var(--body); }
 .bounding-box.ok span { background: var(--accent); }
+.bounding-box.other { border: 2px dashed var(--soft); pointer-events: auto; }
 .inspection-image figcaption { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; color: var(--soft); font-size: 11.5px; }
 .photo-credit { margin: 8px 0 0; }
 .case-result .reading { flex-wrap: wrap; }

@@ -1,8 +1,8 @@
 import { show } from "../format";
 import { type Entry, payloadOf, useLive } from "../live";
-import { coordinates } from "./InspectionImage";
+import { coordinates, OtherBoxes, others } from "./InspectionImage";
 
-/** The photo behind an inspection, with its author and licence when it is a real one. */
+/** The photo behind an inspection, with its author and licence. */
 export function Photo({ entry, small = false }: { entry: Entry | undefined; small?: boolean }) {
   const live = useLive();
   const p = payloadOf(entry);
@@ -19,6 +19,7 @@ export function Photo({ entry, small = false }: { entry: Entry | undefined; smal
       {box && !small ? (
         <div className="photo-boxed">
           <img className="photo natural" src={url} alt={`Foto de ${String(p.poi ?? "")}`} loading="lazy" />
+          <OtherBoxes boxes={others(p.other_boxes)} />
           <div
             className={`bounding-box ${p.quality === "good" ? "ok" : "warn"}`}
             style={{ left: `${box[0] / 10}%`, top: `${box[1] / 10}%`, width: `${(box[2] - box[0]) / 10}%`, height: `${(box[3] - box[1]) / 10}%` }}
@@ -33,7 +34,7 @@ export function Photo({ entry, small = false }: { entry: Entry | undefined; smal
         <figcaption>
           {real ? (
             <>
-              {credit.condicion === "retocada" ? "Foto de" : "Foto real de"}{" "}
+              Foto de{" "}
               <a href={credit.fuente} target="_blank" rel="noreferrer">
                 {credit.autor}
               </a>
