@@ -5,6 +5,7 @@ import { DisturbanceButton } from "../components/Disturbance";
 import { ago, dec, show } from "../format";
 import { live as store, payloadOf, stamp, summary, useLive, useNow } from "../live";
 import { CLEAR_BAR, DB1, HIGH_BAR, T } from "../topics";
+import { useServices, Zone } from "./ArchitecturePage";
 
 interface Scenario {
   fase_s: number;
@@ -34,14 +35,10 @@ export function PlcPage() {
 
   return (
     <div className="plc-page">
+      <section className="card plc-path-card">
+        <PlcPath />
+      </section>
       <Card title="PLC-1, Siemens S7 simulado" aside={<Badge tone={anyAlarm ? "bad" : "ok"}>{anyAlarm ? "Con alarmas" : "Sin alarmas"}</Badge>}>
-        <div className="chain" aria-label="Del PLC al broker">
-          <div className="node"><b>PLC-1</b><span>servidor S7 · python-snap7 · DB1</span></div>
-          <div className="link">S7comm · cada 200 ms →</div>
-          <div className="node"><b>plc-mqtt-gateway</b><span>cliente S7 · publica lo que cambia</span></div>
-          <div className="link">MQTT · QoS 1 →</div>
-          <div className="node"><b>Mosquitto</b><span>UNS planta1/…</span></div>
-        </div>
         <table className="tags">
           <thead>
             <tr>
@@ -157,4 +154,38 @@ function useScenario(): Scenario | null {
     };
   }, []);
   return s;
+}
+
+/** Where the PLC sits and how its data reaches the broker, drawn like the architecture page. */
+function PlcPath() {
+  const services = useServices();
+  const state = (id: string) => services.find((x) => x.nombre === id)?.estado ?? "sin-datos";
+  const boxes = [
+    { id: "world", name: "PLC-1", role: "S7 · DB1 · python-snap7", x: 165 },
+    { id: "", name: "SCALANCE SC-600", role: "firewall OT / IT", x: 390, fw: true },
+    { id: "plc-gateway", name: "plc-mqtt-gateway", role: "cliente S7 → MQTT", x: 625 },
+    { id: "broker", name: "Mosquitto", role: "UNS", x: 865, hub: true },
+  ];
+  const w = 190;
+  return (
+    <svg viewBox="0 0 1000 132" className="arch plc-path" role="img" aria-label="Del PLC al broker">
+      <Zone y={8} h={116} w={300} label="campo" />
+      <Zone x={480} y={8} h={116} w={510} label="uns" />
+      {[["S7comm", 165, 390, "other"], ["", 390, 625, "other"], ["MQTT", 625, 865, "mqtt"]].map(([label, a, b, kind]) => (
+        <g key={String(a)} className={`link ${kind}`}>
+          <line x1={Number(a)} y1={58} x2={Number(b)} y2={58} />
+          {label && <text x={(Number(a) + Number(b)) / 2} y={52}>{label}</text>}
+        </g>
+      ))}
+      {boxes.map((b) => (
+        <g key={b.name} className={`svc ${b.hub ? "hub" : ""} ${b.fw ? "fw" : ""}`} transform={`translate(${b.x - w / 2},36)`}>
+          {b.fw && <title>Referencia de planta; en la demo lo hacen las redes Docker</title>}
+          <rect width={w} height={44} rx={8} />
+          {b.id && <circle cx={16} cy={22} r={5} className={`state ${state(b.id)}`} />}
+          <text x={b.id ? 28 : 14} y={20} className="svc-name">{b.name}</text>
+          <text x={b.id ? 28 : 14} y={35} className="svc-role">{b.role}</text>
+        </g>
+      ))}
+    </svg>
+  );
 }

@@ -592,8 +592,5 @@ table.services .num { text-align: right; white-space: nowrap; }
   .tour-hole, .tour-box { transition: none; }
 }
 .segmented { display: inline-flex; gap: 4px; }
-.chain { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
-.chain .node { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
-.chain .node b { display: block; font-size: 13px; }
-.chain .node span { color: var(--soft); font-size: 12px; }
-.chain .link { color: var(--soft); font-size: 12px; white-space: nowrap; }
+.plc-path-card { grid-column: 1 / -1; }
+.arch .svc.fw rect { stroke: var(--alarm); stroke-width: 1.4; }

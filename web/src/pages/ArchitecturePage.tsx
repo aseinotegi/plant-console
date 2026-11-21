@@ -63,7 +63,7 @@ const LINKS: [string, string, string, "mqtt" | "other"][] = [
   ["simulador", "world", "http", "other"],
 ];
 
-function useServices(): Service[] {
+export function useServices(): Service[] {
   const [s, setS] = useState<Service[]>([]);
   useEffect(() => {
     let alive = true;
@@ -190,7 +190,7 @@ export function ArchitecturePage() {
   );
 }
 
-function Zone({ x = 10, y, w = 980, h, label }: { x?: number; y: number; w?: number; h: number; label: string }) {
+export function Zone({ x = 10, y, w = 980, h, label }: { x?: number; y: number; w?: number; h: number; label: string }) {
   return (
     <g className={`zone ${label}`}>
       <rect x={x} y={y} width={w} height={h} rx={10} />
