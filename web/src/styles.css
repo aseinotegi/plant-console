@@ -555,3 +555,39 @@ table.services .num { text-align: right; white-space: nowrap; }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
+
+/* -- first-visit tour ------------------------------------------------------------------- */
+.tour-help {
+  width: 22px; height: 22px; border-radius: 50%; padding: 0;
+  font: 600 12px/1 var(--body); color: var(--soft);
+  background: transparent; border: 1px solid var(--steel); cursor: pointer;
+}
+.tour-help:hover { color: var(--ink); border-color: var(--soft); }
+.tour-veil { position: fixed; inset: 0; z-index: 50; background: rgba(3, 7, 15, 0.72); display: grid; place-items: center; padding: 16px; }
+.tour-veil.clear { background: transparent; display: block; padding: 0; }
+.tour-dim { position: fixed; inset: 0; background: rgba(3, 7, 15, 0.72); }
+.tour-hole {
+  position: fixed; border-radius: 10px; pointer-events: none;
+  box-shadow: 0 0 0 2px var(--accent), 0 0 0 9999px rgba(3, 7, 15, 0.72);
+  transition: top 0.25s ease, left 0.25s ease, width 0.25s ease, height 0.25s ease;
+}
+.tour-box {
+  position: fixed; width: min(330px, calc(100vw - 32px));
+  background: var(--surface); border: 1px solid var(--steel); border-radius: 10px;
+  padding: 14px 16px 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  transition: top 0.25s ease, left 0.25s ease;
+}
+.tour-box:focus { outline: none; }
+.tour-box h2 { margin-bottom: 6px; }
+.tour-box p { color: var(--soft); }
+.tour-welcome { position: static; width: min(420px, 100%); padding: 20px 22px 16px; }
+.tour-welcome h2 { font-size: 18px; }
+.tour-count { font: 12px var(--mono); color: var(--accent); margin-bottom: 4px; }
+.tour-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; }
+.tour-welcome .tour-actions { justify-content: flex-end; }
+.tour-nav { display: flex; gap: 6px; }
+.tour-skip { border-color: transparent; color: var(--faint); }
+.tour-skip:hover:not(:disabled) { color: var(--ink); border-color: var(--steel); }
+@media (prefers-reduced-motion: reduce) {
+  .tour-hole, .tour-box { transition: none; }
+}

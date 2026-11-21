@@ -21,7 +21,7 @@ export function RobotPage() {
 
   return (
     <div className="robot-page">
-      <section className="map-panel">
+      <section className="map-panel" data-tour="mapa">
         <header className="panel-head">
           <h1>{plant?.nombre ?? "Planta"}</h1>
         </header>
@@ -106,7 +106,7 @@ function Overview() {
   const rules = [...live.topics.values()].filter((e) => e.topic.startsWith(T.rules));
   const active = rules.filter((r) => payloadOf(r).value === "activa");
   return (
-    <Card title="Línea 104" aside={<Badge tone={active.length ? "bad" : "ok"}>{active.length ? `${active.length} alarma${active.length > 1 ? "s" : ""}` : "Sin alarmas"}</Badge>}>
+    <Card tour="linea" title="Línea 104" aside={<Badge tone={active.length ? "bad" : "ok"}>{active.length ? `${active.length} alarma${active.length > 1 ? "s" : ""}` : "Sin alarmas"}</Badge>}>
       <Row label="Presión, visión PI-104">
         {dec(payloadOf(live.get(T.pi104)).value, 2)} bar
       </Row>

@@ -1,9 +1,21 @@
 import type { ReactNode } from "react";
 import type { Tone } from "../format";
 
-export function Card({ title, aside, children, className }: { title?: ReactNode; aside?: ReactNode; children: ReactNode; className?: string }) {
+export function Card({
+  title,
+  aside,
+  children,
+  className,
+  tour,
+}: {
+  title?: ReactNode;
+  aside?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  tour?: string; // a stop of the first-visit tour
+}) {
   return (
-    <section className={`card ${className ?? ""}`}>
+    <section className={`card ${className ?? ""}`} data-tour={tour}>
       {(title || aside) && (
         <header className="card-head">
           {title && <h2>{title}</h2>}

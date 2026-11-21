@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Dot } from "./components/bits";
+import { Tour, useTour } from "./components/Tour";
 import { useLive } from "./live";
 import { ArchitecturePage } from "./pages/ArchitecturePage";
 import { HistoryPage } from "./pages/HistoryPage";
@@ -39,6 +40,7 @@ function useRoute(): string {
 export function App() {
   const route = useRoute();
   const live = useLive();
+  const tour = useTour();
   const current = [...PAGES, ...HIDDEN].find((p) => p.path === route) ?? PAGES[0];
   const Page = current.page;
   return (
@@ -51,7 +53,7 @@ export function App() {
             <path d="M11 25v-3M21 25v-3" />
           </svg>
         </a>
-        <nav>
+        <nav data-tour="pestanas">
           {PAGES.map((p) => (
             <a key={p.path} href={`#/${p.path}`} className={p === current ? "active" : ""} aria-current={p === current ? "page" : undefined}>
               {p.label}
@@ -61,11 +63,15 @@ export function App() {
         <div className="status">
           <Dot on={live.socket} label="Consola" />
           <Dot on={live.socket && live.broker} label="Broker" />
+          <button className="tour-help" data-tour="ayuda" onClick={tour.start} aria-label="Recorrido por la consola" title="Recorrido por la consola">
+            ?
+          </button>
         </div>
       </header>
       <main>
         <Page />
       </main>
+      <Tour {...tour} />
     </>
   );
 }
