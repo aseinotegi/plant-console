@@ -91,7 +91,7 @@ export function PlcPage() {
             <Chart
               series={[{ points: scenario.perfil, color: "var(--soft)", label: "presión de entrada, bar" }]}
               x={[0, scenario.ciclo_s]}
-              y={[3.5, 7.5]}
+              y={[3.5, 9]}
               lines={[{ y: HIGH_BAR, label: "6,0", color: "var(--bad)" }]}
               cursor={scenario.fase_s}
               xLabel={(t) => `${Math.round(t)} s`}
@@ -111,7 +111,7 @@ export function PlcPage() {
               { points: trend(T.pt104), color: "var(--accent)", label: "PT-104, PLC" },
               { points: trend(T.pi104), color: "var(--alarm)", label: "PI-104, visión", dots: true },
             ],
-            [3.5, 7.5],
+            [3.5, 9],
             [
               { y: HIGH_BAR, label: "dispara 6,0", color: "var(--bad)" },
               { y: CLEAR_BAR, label: "rearma 5,5", color: "var(--soft)" },
