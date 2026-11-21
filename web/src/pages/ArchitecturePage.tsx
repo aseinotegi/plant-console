@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { Badge } from "../components/bits";
 import { dec } from "../format";
+import { useLive } from "../live";
 
 interface Service {
   nombre: string;
@@ -27,40 +28,47 @@ const STATE: Record<Service["estado"], { label: string; tone: "ok" | "warn" | "b
 
 interface Box {
   id: string;
+  label: string;
   x: number;
   y: number;
   w?: number;
+  kind?: "hub" | "fw" | "edge"; // edge and fw: no container behind, no state
+  showroom?: boolean; // only drawn in the public demo
 }
 
+// From the plant floor up: the PLC behind the OT/IT firewall, the UNS in the middle,
+// the database apart, and what a browser reaches on top.
 const BOXES: Box[] = [
-  { id: "console", x: 330, y: 70 },
-  { id: "grafana", x: 800, y: 70 },
-  { id: "inspector", x: 120, y: 190 },
-  { id: "rules", x: 330, y: 255 },
-  { id: "broker", x: 520, y: 190, w: 180 },
-  { id: "historian", x: 690, y: 255 },
-  { id: "timescaledb", x: 880, y: 190 },
-  { id: "plc-gateway", x: 260, y: 360 },
-  { id: "robot", x: 500, y: 360 },
-  { id: "simulador", x: 740, y: 360 },
-  { id: "world", x: 500, y: 455, w: 200 },
+  { id: "cloudflared", label: "Cloudflare Tunnel", x: 565, y: 68, kind: "edge", showroom: true },
+  { id: "console", label: "consola · HMI", x: 330, y: 68 },
+  { id: "grafana", label: "grafana", x: 800, y: 68 },
+  { id: "inspector", label: "inspector · visión", x: 130, y: 172, w: 180 },
+  { id: "plc-gateway", label: "plc-mqtt-gateway", x: 130, y: 252, w: 180 },
+  { id: "rules", label: "reglas", x: 335, y: 252 },
+  { id: "broker", label: "Mosquitto", x: 520, y: 182, kind: "hub" },
+  { id: "historian", label: "historian", x: 705, y: 252 },
+  { id: "timescaledb", label: "timescaledb", x: 885, y: 182 },
+  { id: "firewall", label: "SCALANCE SC-600", x: 500, y: 309, w: 190, kind: "fw" },
+  { id: "world", label: "PLC-1", x: 230, y: 420 },
+  { id: "robot", label: "robot", x: 500, y: 420 },
+  { id: "simulador", label: "escenario", x: 770, y: 420 },
 ];
 
 const LINKS: [string, string, string, "mqtt" | "other"][] = [
+  ["cloudflared", "console", "https", "other"],
+  ["cloudflared", "grafana", "https", "other"],
   ["console", "broker", "", "mqtt"],
-  ["console", "robot", "http", "other"],
   ["grafana", "timescaledb", "sql", "other"],
   ["inspector", "broker", "", "mqtt"],
-  ["inspector", "robot", "http", "other"],
   ["rules", "broker", "", "mqtt"],
   ["historian", "broker", "", "mqtt"],
   ["historian", "timescaledb", "sql", "other"],
   ["plc-gateway", "broker", "", "mqtt"],
-  ["robot", "broker", "", "mqtt"],
-  ["simulador", "broker", "", "mqtt"],
-  ["plc-gateway", "world", "s7", "other"],
-  ["robot", "world", "http", "other"],
-  ["simulador", "world", "http", "other"],
+  ["plc-gateway", "firewall", "s7", "other"],
+  ["firewall", "broker", "", "mqtt"],
+  ["world", "firewall", "s7", "other"],
+  ["robot", "firewall", "", "mqtt"],
+  ["simulador", "firewall", "", "mqtt"],
 ];
 
 export function useServices(): Service[] {
@@ -87,8 +95,10 @@ export function useServices(): Service[] {
 
 export function ArchitecturePage() {
   const services = useServices();
+  const { showroom } = useLive();
   const by = (id: string) => services.find((s) => s.nombre === id);
-  const at = (id: string) => BOXES.find((b) => b.id === id)!;
+  const boxes = BOXES.filter((b) => showroom || !b.showroom);
+  const at = (id: string) => boxes.find((b) => b.id === id);
   const healthy = services.filter((s) => s.estado === "ok").length;
 
   return (
@@ -156,6 +166,7 @@ export function ArchitecturePage() {
           {LINKS.map(([a, b, label, kind]) => {
             const A = at(a);
             const B = at(b);
+            if (!A || !B) return null;
             return (
               <g key={a + b} className={`link ${kind}`}>
                 <line x1={A.x} y1={A.y} x2={B.x} y2={B.y} />
@@ -167,19 +178,22 @@ export function ArchitecturePage() {
               </g>
             );
           })}
-          {BOXES.map((b) => {
+          {boxes.map((b) => {
             const w = b.w ?? 160;
             const s = by(b.id);
             const state = s?.estado ?? "sin-datos";
+            const plain = b.kind === "fw" || b.kind === "edge";
+            const x = plain ? 14 : 28;
             return (
-              <g key={b.id} className={`svc ${b.id === "broker" ? "hub" : ""}`} transform={`translate(${b.x - w / 2},${b.y - 22})`}>
+              <g key={b.id} className={`svc ${b.kind ?? ""}`} transform={`translate(${b.x - w / 2},${b.y - 22})`}>
+                {b.kind === "fw" && <title>Referencia de planta; en la demo lo hacen las redes Docker</title>}
                 <rect width={w} height={44} rx={8} />
-                <circle cx={16} cy={22} r={5} className={`state ${state}`} />
-                <text x={28} y={20} className="svc-name">
-                  {b.id}
+                {!plain && <circle cx={16} cy={22} r={5} className={`state ${state}`} />}
+                <text x={x} y={20} className="svc-name">
+                  {b.label}
                 </text>
-                <text x={28} y={35} className="svc-role">
-                  {s?.visible ? s.ips[0] : s ? "aislada" : ""}
+                <text x={x} y={35} className="svc-role">
+                  {b.kind === "fw" ? "firewall OT / IT" : b.kind === "edge" ? "internet" : s?.visible ? s.ips[0] : s ? "aislada" : ""}
                 </text>
               </g>
             );
