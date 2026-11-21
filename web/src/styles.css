@@ -18,6 +18,7 @@
   --accent: #22d3ee;
   --alarm: #f5a524;
   --bad: #f87171;
+  --ok: #4ade80;
   --walk: #c9a43a;
   --water: #4c7da8;
   --n2: #5f9c80;
@@ -604,3 +605,7 @@ table.services .num { text-align: right; white-space: nowrap; }
 .arch .flow.escritura { stroke: var(--alarm); }
 @keyframes arch-flow { to { stroke-dashoffset: -16; } }
 @media (prefers-reduced-motion: reduce) { .arch .flow { animation: none; } }
+.arch .svc.st-ok rect { stroke: var(--ok); stroke-width: 1.6; }
+.arch .svc.st-degradado rect { stroke: var(--alarm); stroke-width: 1.6; }
+.arch .svc.st-caido rect { stroke: var(--bad); stroke-width: 2; }
+.arch .state.ok { fill: var(--ok); }

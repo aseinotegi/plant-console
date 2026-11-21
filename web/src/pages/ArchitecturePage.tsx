@@ -171,7 +171,7 @@ export function ArchitecturePage() {
             const plain = b.kind === "fw" || b.kind === "edge";
             const x = plain ? 14 : 28;
             return (
-              <g key={b.id} className={`svc ${b.kind ?? ""} ${mode !== "todo" && !inFlow.has(b.id) ? "dim" : ""}`} transform={`translate(${b.x - w / 2},${b.y - 22})`}>
+              <g key={b.id} className={`svc ${b.kind ?? ""} ${plain ? "" : `st-${state}`} ${mode !== "todo" && !inFlow.has(b.id) ? "dim" : ""}`} transform={`translate(${b.x - w / 2},${b.y - 22})`}>
                 {b.kind === "fw" && <title>Referencia de planta; en la demo lo hacen las redes Docker</title>}
                 <rect width={w} height={44} rx={8} />
                 {!plain && <circle cx={16} cy={22} r={5} className={`state ${state}`} />}

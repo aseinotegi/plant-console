@@ -178,7 +178,7 @@ function PlcPath() {
         </g>
       ))}
       {boxes.map((b) => (
-        <g key={b.name} className={`svc ${b.hub ? "hub" : ""} ${b.fw ? "fw" : ""}`} transform={`translate(${b.x - w / 2},36)`}>
+        <g key={b.name} className={`svc ${b.hub ? "hub" : ""} ${b.fw ? "fw" : ""} ${b.id ? `st-${state(b.id)}` : ""}`} transform={`translate(${b.x - w / 2},36)`}>
           {b.fw && <title>Referencia de planta; en la demo lo hacen las redes Docker</title>}
           <rect width={w} height={44} rx={8} />
           {b.id && <circle cx={16} cy={22} r={5} className={`state ${state(b.id)}`} />}
