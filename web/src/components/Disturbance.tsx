@@ -12,7 +12,9 @@ export function DisturbanceButton() {
       setNote(
         r.ok
           ? "Perturbación lanzada: la presión empieza a subir"
-          : body.estado === "ya-hay-una"
+          : r.status === 429 && body.detail
+            ? String(body.detail)
+            : body.estado === "ya-hay-una"
             ? "Ya hay una perturbación en curso"
             : "El simulador no ha contestado",
       );

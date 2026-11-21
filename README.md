@@ -67,6 +67,24 @@ Environment only:
 | `SERVICES_FILE` | none | the containers to check on the architecture page |
 | `STREAM_TOPICS` | robot position, fast PLC signals, `$SYS` | MQTT patterns kept out of the event log |
 | `WEB_DIR`, `PORT` | set in the image | |
+| `MAX_SOCKETS` | `200` | live connections at once |
+
+### Showroom: the console open to the internet
+
+`SHOWROOM=true` is for a public demo behind Cloudflare Tunnel, with no published port.
+Visitors see everything but cannot change the plant's logic or spend its model quota:
+
+* rules are read-only and the security probes are off (403);
+* the disturbance button waits `DISTURB_COOLDOWN_S` (180) between any two uses, and allows
+  `DISTURB_PER_VISITOR_HOUR` (3) per visitor;
+* vision trials: `TRIALS_PER_VISITOR_HOUR` (6) per visitor, `TRIALS_PER_HOUR` (60) overall,
+  `TRIALS_AT_ONCE` (1); a catalog photo already analyzed is answered from memory for
+  `TRIAL_CACHE_S` (6 h); new images only with `UPLOADS=true`;
+* request bodies are capped, the API docs are off, and pages carry a strict
+  Content-Security-Policy (frames only from `GRAFANA_URL`).
+
+A visitor is the address in `CF-Connecting-IP` (an IPv6 address counts by its /64), which
+is only trustworthy because the tunnel is the only way in.
 
 ## Development
 

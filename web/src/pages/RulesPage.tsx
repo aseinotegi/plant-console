@@ -83,6 +83,7 @@ function orderLabel(o: { topic: string; value: string }): string {
 
 export function RulesPage() {
   const live = useLive();
+  const readOnly = live.showroom;
   const engine = live.get(T.rulesConfig);
   const state = payloadOf(engine);
   const rules = (Array.isArray(state.rules) ? state.rules : []) as Rule[];
@@ -124,9 +125,11 @@ export function RulesPage() {
     <div className="rules-page">
       <header className="panel-head row-between">
         <h1>Reglas</h1>
-        <button className="btn primary" disabled={!!editing || busy || !engine} onClick={() => setEditing({ rule: blank(vars), index: -1 })}>
-          Nueva regla
-        </button>
+        {!readOnly && (
+          <button className="btn primary" disabled={!!editing || busy || !engine} onClick={() => setEditing({ rule: blank(vars), index: -1 })}>
+            Nueva regla
+          </button>
+        )}
       </header>
       {result && <p className={`result ${result.tone}`}>{result.text}</p>}
       {!engine && <p className="muted">Esperando al motor de reglas…</p>}
@@ -144,6 +147,7 @@ export function RulesPage() {
             rule={rule}
             vars={vars}
             disabled={!!editing || busy}
+            readOnly={readOnly}
             onEdit={() => setEditing({ rule: structuredClone(rule), index })}
             onDelete={() => send(rules.filter((_, i) => i !== index), `Regla ${rule.id} borrada`)}
           />
@@ -158,7 +162,7 @@ export function RulesPage() {
   );
 }
 
-function RuleCard({ rule, vars, disabled, onEdit, onDelete }: { rule: Rule; vars: Variable[]; disabled: boolean; onEdit: () => void; onDelete: () => void }) {
+function RuleCard({ rule, vars, disabled, readOnly, onEdit, onDelete }: { rule: Rule; vars: Variable[]; disabled: boolean; readOnly: boolean; onEdit: () => void; onDelete: () => void }) {
   const live = useLive();
   const status = payloadOf(live.get(`${T.rules}${rule.id}`)).value;
   const [confirm, setConfirm] = useState(false);
@@ -194,7 +198,7 @@ function RuleCard({ rule, vars, disabled, onEdit, onDelete }: { rule: Rule; vars
       </div>
       <div className="actions">
         <span className="muted small">{rule.id}</span>
-        {confirm ? (
+        {readOnly ? null : confirm ? (
           <>
             <span className="small">¿Borrar esta regla?</span>
             <button className="btn small danger" onClick={onDelete} disabled={disabled}>

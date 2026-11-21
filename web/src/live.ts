@@ -77,6 +77,8 @@ class LiveStore {
   socket = false;
   broker = false;
   grafanaUrl = "";
+  showroom = false; // the public demo: read-only rules, no probes
+  uploads = true;
   credits: Record<string, PhotoCredit> = {};
   rate = 0; // messages per second
   version = 0;
@@ -114,6 +116,8 @@ class LiveStore {
       const body = r.ok ? await r.json() : {};
       this.broker = body.broker === true;
       this.grafanaUrl = body.grafana_url || `${location.protocol}//${location.hostname}:3000`;
+      this.showroom = body.showroom === true;
+      this.uploads = body.uploads !== false;
     } catch {
       this.broker = false;
     }

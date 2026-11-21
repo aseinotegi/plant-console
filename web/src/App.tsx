@@ -41,7 +41,8 @@ export function App() {
   const route = useRoute();
   const live = useLive();
   const tour = useTour();
-  const current = [...PAGES, ...HIDDEN].find((p) => p.path === route) ?? PAGES[0];
+  const reachable = live.showroom ? PAGES : [...PAGES, ...HIDDEN];
+  const current = reachable.find((p) => p.path === route) ?? PAGES[0];
   const Page = current.page;
   return (
     <>

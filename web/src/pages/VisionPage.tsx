@@ -208,10 +208,7 @@ export function VisionPage() {
   return (
     <div className="vision-page">
       <header className="panel-head row-between">
-        <div>
-          <h1>Visión</h1>
-          <p className="muted">Explora cualquier caso del dataset y comprueba la ejecución asociada, sin esperar a la ruta del robot.</p>
-        </div>
+        <h1>Visión</h1>
         {config.value !== undefined && <span className="muted small">prompt {String(config.value)}</span>}
       </header>
 
@@ -299,7 +296,7 @@ export function VisionPage() {
         ) : <Card title="Sin casos">No hay imágenes para este filtro.</Card>}
       </section>
 
-      <Card title="Probar una imagen nueva" className="upload-card">
+      {live.uploads && <Card title="Probar una imagen nueva" className="upload-card">
         <p className="muted">La imagen se envía como ensayo. No cambia valores, alarmas ni órdenes de la planta.</p>
         <div className="upload-controls">
           <input type="file" accept="image/jpeg,image/png" onChange={chooseUpload} />
@@ -326,7 +323,7 @@ export function VisionPage() {
             )}
           </div>
         )}
-      </Card>
+      </Card>}
 
       <Card title="Analítica por punto · solo sesión actual">
         <table className="tags">

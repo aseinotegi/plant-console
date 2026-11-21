@@ -18,7 +18,9 @@ Everything it shows comes from the UNS (MQTT) or from the robot's own server:
 The console's MQTT user can only read, plus rules, disturbance and trial requests
 (broker ACL): it cannot send an order to the plant. Configuration is environment
 only: MQTT_HOST, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD, SITE, ROBOT_URL,
-GRAFANA_URL, WEB_DIR, STREAM_TOPICS, SERVICES_FILE.
+GRAFANA_URL, WEB_DIR, STREAM_TOPICS, SERVICES_FILE, MAX_SOCKETS, and for the public demo
+SHOWROOM with its limits (see showroom.py): DISTURB_COOLDOWN_S, DISTURB_PER_VISITOR_HOUR,
+TRIALS_PER_VISITOR_HOUR, TRIALS_PER_HOUR, TRIALS_AT_ONCE, TRIAL_CACHE_S, UPLOADS.
 """
 
 from __future__ import annotations
@@ -45,11 +47,14 @@ from pydantic import BaseModel
 
 from .live import Live, connect
 from .services import check_all, load_services
+from .showroom import Limiter, Memo, security_headers, truthy, visitor
 
 log = logging.getLogger("console")
 
 PHOTO_NAME = re.compile(r"^[a-z0-9_.-]+\.jpe?g$")
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
+MAX_BODY_BYTES = MAX_IMAGE_BYTES * 4 // 3 + 64 * 1024  # an image in base64, plus the JSON
+SMALL_BODY_BYTES = 64 * 1024  # without uploads nothing needs more
 IMAGE_MIME = {"image/jpeg", "image/png"}
 
 
@@ -65,6 +70,17 @@ class Settings:
         self.grafana_url = env.get("GRAFANA_URL", "")
         self.web_dir = env.get("WEB_DIR", "")
         self.services_file = env.get("SERVICES_FILE", "")
+        # Showroom: open to anyone. Read-only rules, no probes, rationed buttons.
+        self.showroom = truthy(env.get("SHOWROOM"))
+        on = self.showroom
+        self.disturb_cooldown_s = float(env.get("DISTURB_COOLDOWN_S", "180" if on else "0"))
+        self.disturb_per_visitor = int(env.get("DISTURB_PER_VISITOR_HOUR", "3" if on else "0"))
+        self.trials_per_visitor = int(env.get("TRIALS_PER_VISITOR_HOUR", "6" if on else "0"))
+        self.trials_per_hour = int(env.get("TRIALS_PER_HOUR", "60" if on else "0"))
+        self.trials_at_once = int(env.get("TRIALS_AT_ONCE", "1" if on else "0"))
+        self.trial_cache_s = float(env.get("TRIAL_CACHE_S", "21600" if on else "0"))
+        self.uploads = truthy(env.get("UPLOADS", "false" if on else "true"))
+        self.max_sockets = int(env.get("MAX_SOCKETS", "200"))
         s = self.site
         default_streams = ",".join(
             [
@@ -155,8 +171,39 @@ def create_app(
             client.loop_stop()
             client.disconnect()
 
-    app = FastAPI(title="plant-console", lifespan=lifespan)
+    docs = {} if not settings.showroom else {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    app = FastAPI(title="plant-console", lifespan=lifespan, **docs)
     app.state.live = live
+    disturb_limit = Limiter(settings.disturb_per_visitor, 3600, settings.disturb_cooldown_s)
+    trial_limit = Limiter(settings.trials_per_visitor, 3600, overall=settings.trials_per_hour)
+    trial_answers = Memo(settings.trial_cache_s)
+    running = {"trials": 0, "sockets": 0}
+    max_body = MAX_BODY_BYTES if settings.uploads else SMALL_BODY_BYTES
+    headers = security_headers(settings.grafana_url) if settings.showroom else {}
+
+    @app.middleware("http")
+    async def guard(request: Request, call_next):
+        if request.method in ("POST", "PUT", "PATCH"):
+            length = request.headers.get("content-length", "")
+            if not length.isdigit() and "transfer-encoding" in request.headers:
+                return JSONResponse({"detail": "falta Content-Length"}, status_code=411)
+            if length.isdigit() and int(length) > max_body:
+                return JSONResponse({"detail": "la petición es demasiado grande"}, status_code=413)
+        response = await call_next(request)
+        response.headers.update(headers)
+        return response
+
+    def not_in_showroom(what: str) -> None:
+        if settings.showroom:
+            raise HTTPException(403, f"{what} no está disponible en la demo pública")
+
+    def ration(limiter: Limiter, request: Request, what: str) -> JSONResponse | None:
+        wait = limiter.wait(visitor(request))
+        if wait <= 0:
+            return None
+        detail = f"{what} disponible de nuevo en {int(wait) + 1} s"
+        body = {"ok": False, "detail": detail, "retry_after_s": wait}
+        return JSONResponse(body, status_code=429, headers={"Retry-After": str(int(wait) + 1)})
 
     def send(topic: str, payload: dict[str, Any]) -> None:
         if state["publish"] is None:
@@ -171,7 +218,14 @@ def create_app(
 
     @app.get("/api/estado")
     def estado() -> dict[str, Any]:
-        return {"broker": live.connected, "site": settings.site, "grafana_url": settings.grafana_url}
+        return {
+            "broker": live.connected,
+            "site": settings.site,
+            "grafana_url": settings.grafana_url,
+            "showroom": settings.showroom,
+            "uploads": settings.uploads,
+            "disturb_cooldown_s": settings.disturb_cooldown_s,
+        }
 
     services = load_services(settings.services_file)
 
@@ -220,6 +274,8 @@ def create_app(
     async def vision_trial(body: VisionTrialBody, request: Request) -> Any:
         if bool(body.file) == bool(body.image_b64):
             raise HTTPException(400, "indica una foto del catálogo o una imagen nueva, no ambas")
+        if body.image_b64 and not settings.uploads:
+            raise HTTPException(403, "subir imágenes no está disponible en la demo pública")
         config_entry = live.last(f"{settings.site}/servicios/inspector/config")
         config = config_entry.payload if config_entry and isinstance(config_entry.payload, dict) else {}
         if body.poi not in config.get("pois", {}):
@@ -239,6 +295,8 @@ def create_app(
                 raise HTTPException(404, "la foto no está en el catálogo")
             if credit.get("poi") != body.poi:
                 raise HTTPException(400, "la foto no pertenece al punto de interés indicado")
+            if (known := trial_answers.get((body.file, body.poi))) is not None:
+                return {"ok": known.get("state") == "completada", "result": known, "cached": True}
             photo_response = await robot(request, f"/fotos/{body.file}")
             if photo_response.status_code != 200:
                 raise HTTPException(502, "el robot no puede recuperar la foto")
@@ -268,6 +326,11 @@ def create_app(
             raise HTTPException(400, "el contenido no es una imagen JPEG")
         if mime == "image/png" and not image.startswith(b"\x89PNG\r\n\x1a\n"):
             raise HTTPException(400, "el contenido no es una imagen PNG")
+        if settings.trials_at_once and running["trials"] >= settings.trials_at_once:
+            busy = {"ok": False, "detail": "El inspector está con otro análisis: prueba en unos segundos"}
+            return JSONResponse(busy, status_code=429, headers={"Retry-After": "10"})
+        if limited := ration(trial_limit, request, "El análisis"):
+            return limited
 
         captured = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
         payload = {
@@ -283,13 +346,20 @@ def create_app(
         }
         if image_file:
             payload["image_file"] = image_file
-        send(f"{settings.vision_trial_topic}/foto", payload)
-        result = await answer(live, f"{settings.vision_trial_topic}/resultado", request_id, vision_timeout_s)
+        running["trials"] += 1
+        try:
+            send(f"{settings.vision_trial_topic}/foto", payload)
+            topic = f"{settings.vision_trial_topic}/resultado"
+            result = await answer(live, topic, request_id, vision_timeout_s)
+        finally:
+            running["trials"] -= 1
         if result is None:
             return JSONResponse(
                 {"ok": False, "detail": "el inspector no ha contestado", "request": request_id},
                 status_code=504,
             )
+        if image_file and result.get("state") == "completada":
+            trial_answers.put((image_file, body.poi), result)
         return {"ok": result.get("state") == "completada", "result": result}
 
     @app.get("/api/escenario")
@@ -301,7 +371,9 @@ def create_app(
         return {"fase_s": p.get("value"), **{k: v for k, v in p.items() if k not in ("value", "ts", "unit")}}
 
     @app.post("/api/escenario/perturbacion")
-    async def perturbacion() -> Any:
+    async def perturbacion(http: Request) -> Any:
+        if limited := ration(disturb_limit, http, "La perturbación"):
+            return limited
         request = uuid.uuid4().hex
         send(settings.disturb_topic, {"value": "provocar", "source": "console", "request": request})
         result = await answer(live, f"{settings.disturb_topic}/resultado", request, answer_timeout_s)
@@ -326,6 +398,7 @@ def create_app(
 
     @app.put("/api/reglas")
     async def guardar_reglas(body: RulesBody) -> Any:
+        not_in_showroom("Editar reglas")
         request = uuid.uuid4().hex
         send(
             f"{settings.rules_topic}/set",
@@ -346,6 +419,7 @@ def create_app(
         """Publishes an order to XV-104 with the console's own user. The broker's ACL must
         drop it: if it ever comes back to the console (which reads everything), it got through.
         The value is not an order the robot knows, so even then nothing would move."""
+        not_in_showroom("Esta prueba")
         topic = f"{settings.site}/exterior/xv-104/orden"
         request = uuid.uuid4().hex
         send(topic, {"value": "prueba-acl", "source": "console", "request": request})
@@ -361,6 +435,7 @@ def create_app(
     async def regla_que_abre() -> Any:
         """Proposes a rule that would open XV-104, an order outside the whitelist. The engine
         must refuse it. Its condition can never hold, and if it were taken, it is undone."""
+        not_in_showroom("Esta prueba")
         current = live.last(settings.rules_topic)
         rules = current.payload.get("rules", []) if current and isinstance(current.payload, dict) else []
         probe = {
@@ -392,7 +467,11 @@ def create_app(
 
     @app.websocket("/api/ws")
     async def ws(socket: WebSocket) -> None:
+        if running["sockets"] >= settings.max_sockets:
+            await socket.close(code=1013)  # try again later
+            return
         await socket.accept()
+        running["sockets"] += 1
         queue = live.listen()
         try:
             await socket.send_json({"type": "snapshot", **live.snapshot()})
@@ -403,6 +482,7 @@ def create_app(
         except (WebSocketDisconnect, RuntimeError):
             pass
         finally:
+            running["sockets"] -= 1
             live.forget(queue)
 
     if settings.web_dir and Path(settings.web_dir, "index.html").exists():
