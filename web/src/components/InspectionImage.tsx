@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { dec, qualityLabel, show } from "../format";
+import { qualityLabel, show } from "../format";
 import { type Entry, payloadOf } from "../live";
 
 function coordinates(value: unknown): number[] | null {
@@ -7,13 +7,6 @@ function coordinates(value: unknown): number[] | null {
   if (!value.every((v) => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1000)) return null;
   if (value[0] >= value[2] || value[1] >= value[3]) return null;
   return value;
-}
-
-function sourceLabel(source: unknown): string {
-  if (source === "model") return "Caja predicha por el modelo";
-  if (source === "replay") return "Caja incluida en la respuesta grabada · replay";
-  if (source === "annotated") return "Región anotada manualmente";
-  return "Caja devuelta por el inspector · origen no indicado";
 }
 
 export function InspectionImage({ entry, file, url }: { entry: Entry | undefined; file: string; url: string }) {
@@ -25,7 +18,7 @@ export function InspectionImage({ entry, file, url }: { entry: Entry | undefined
   return (
     <figure className="inspection-image">
       <div className="image-toolbar">
-        <span className="muted small">Zoom {Math.round(zoom * 100)} %</span>
+        <span />
         <div className="actions">
           <button className="btn small" disabled={zoom <= 1} onClick={() => setZoom((z) => Math.max(1, z - 0.5))} aria-label="Reducir imagen">
             −
@@ -51,10 +44,6 @@ export function InspectionImage({ entry, file, url }: { entry: Entry | undefined
           )}
         </div>
       </div>
-      <figcaption>
-        <span>{box ? sourceLabel(p.bbox_source) : "Sin caja de localización para esta ejecución"}</span>
-        {typeof p.confidence === "number" && <span>Confianza declarada: {dec(p.confidence * 100, 0)} % · no equivale a precisión medida</span>}
-      </figcaption>
     </figure>
   );
 }

@@ -591,3 +591,4 @@ table.services .num { text-align: right; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) {
   .tour-hole, .tour-box { transition: none; }
 }
+.segmented { display: inline-flex; gap: 4px; }

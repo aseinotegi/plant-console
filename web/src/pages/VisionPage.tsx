@@ -1,4 +1,4 @@
-// A catalog the visitor can inspect directly, followed by the exact execution and
+// Vision: a photo of your own first, then the catalog with each execution, and the
 // session analytics. Repeated robot inspections are not a reproducible model evaluation.
 
 import { type ChangeEvent, useState } from "react";
@@ -36,10 +36,19 @@ interface TrialRun {
 
 interface UploadCase {
   name: string;
-  poi: string;
   mime: string;
   dataUrl: string;
   imageB64: string;
+}
+
+type Kind = "manometro" | "extintor";
+const KINDS: [Kind, string][] = [["manometro", "Manómetro"], ["extintor", "Extintor"]];
+
+/** The point of interest a visitor's photo is read as: the widest range of its kind. */
+function poiFor(pois: Record<string, PoiConfig>, kind: Kind): string | null {
+  const candidates = Object.entries(pois).filter(([, c]) => c.profile === kind);
+  candidates.sort(([, a], [, b]) => (b.expect ? b.expect.max - b.expect.min : 0) - (a.expect ? a.expect.max - a.expect.min : 0));
+  return candidates[0]?.[0] ?? null;
 }
 
 type Live = ReturnType<typeof useLive>;
@@ -117,6 +126,7 @@ export function VisionPage() {
   const [origin, setOrigin] = useState<Origin>("all");
   const [trial, setTrial] = useState<TrialRun | null>(null);
   const [upload, setUpload] = useState<UploadCase | null>(null);
+  const [kind, setKind] = useState<Kind>("manometro");
   const [uploadTrial, setUploadTrial] = useState<TrialRun | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const current = poi ?? (selectedFile ? live.credits[selectedFile]?.poi : null) ?? ids[0] ?? null;
@@ -176,29 +186,30 @@ export function VisionPage() {
     }
     if (!["image/jpeg", "image/png"].includes(image.type)) {
       setUpload(null);
-      setUploadError("Solo se admiten imágenes JPEG o PNG.");
+      setUploadError("Solo JPEG o PNG");
       return;
     }
     if (image.size > MAX_IMAGE_BYTES) {
       setUpload(null);
-      setUploadError("La imagen supera el límite de 8 MiB.");
+      setUploadError("Máximo 8 MB");
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result !== "string") return;
-      setUpload({ name: image.name, poi: current ?? ids[0] ?? "", mime: image.type, dataUrl: reader.result, imageB64: reader.result.split(",", 2)[1] ?? "" });
+      setUpload({ name: image.name, mime: image.type, dataUrl: reader.result, imageB64: reader.result.split(",", 2)[1] ?? "" });
     };
-    reader.onerror = () => setUploadError("No se pudo leer la imagen seleccionada.");
+    reader.onerror = () => setUploadError("No se pudo leer la imagen");
     reader.readAsDataURL(image);
   };
 
+  const uploadPoi = poiFor(pois, kind);
   const analyzeUpload = async () => {
-    if (!upload?.poi) return;
+    if (!upload || !uploadPoi) return;
     const request = newRequest();
     setUploadTrial({ request, file: upload.name, state: "en-cola" });
     try {
-      const result = await sendTrial({ poi: upload.poi, image_b64: upload.imageB64, mime: upload.mime, request });
+      const result = await sendTrial({ poi: uploadPoi, image_b64: upload.imageB64, mime: upload.mime, request });
       setUploadTrial({ request, file: upload.name, state: String(payloadOf(result).state ?? "completada"), entry: result });
     } catch (error) {
       setUploadTrial({ request, file: upload.name, state: "error", error: error instanceof Error ? error.message : String(error) });
@@ -207,19 +218,53 @@ export function VisionPage() {
 
   return (
     <div className="vision-page">
-      <header className="panel-head row-between">
+      <header className="panel-head">
         <h1>Visión</h1>
-        {config.value !== undefined && <span className="muted small">prompt {String(config.value)}</span>}
       </header>
 
+      {live.uploads && (
+        <Card title="Prueba con tu foto" className="upload-card">
+          <div className="upload-controls">
+            <div className="segmented" role="group" aria-label="Qué hay en la foto">
+              {KINDS.map(([value, label]) => (
+                <button key={value} className={`btn small ${kind === value ? "primary" : ""}`} onClick={() => { setKind(value); setUploadTrial(null); }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <input type="file" accept="image/jpeg,image/png" onChange={chooseUpload} />
+            <button className="btn primary" disabled={!upload || !uploadPoi || isRunning(uploadTrial)} onClick={analyzeUpload}>Analizar</button>
+          </div>
+          <p className="muted small">
+            {String(config.trial_provider ?? config.provider) === "gemini" ? "Gemini (Google) puede usar la imagen · aquí no se guarda" : "No se guarda"}
+            {live.trialsPerHour > 0 && ` · ${live.trialsPerHour} por hora`}
+          </p>
+          {uploadError && <p className="result bad">{uploadError}</p>}
+          {upload && (
+            <div className="upload-result">
+              <div>
+                <InspectionImage entry={uploadTrial?.entry} file={upload.name} url={upload.dataUrl} />
+                <TrialStatus run={uploadTrial} status={status} />
+              </div>
+              {uploadTrial?.entry && uploadPoi && (
+                <div>
+                  <ResultDetails live={live} cfg={pois[uploadPoi]} entry={uploadTrial.entry} file={upload.name} imageUrl={upload.dataUrl} />
+                  <ExecutionDetails live={live} cfg={pois[uploadPoi]} config={config} entry={uploadTrial.entry} />
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+      )}
+
       <div className="tiles">
-        <Tile label="Modelo" value={model} sub={model === "replay" ? "respuestas grabadas" : String(config.provider ?? "")} />
-        <Tile label="Inspecciones" value={String(all.length)} sub="eventos de esta sesión" />
+        <Tile label="Modelo" value={model} />
+        <Tile label="Inspecciones" value={String(all.length)} />
         <Tile label="Imágenes únicas" value={String(new Set(all.map((e) => fileOf(live, e)).filter(Boolean)).size)} />
         <Tile label="Fiables" value={all.length ? `${Math.round((all.filter((e) => payloadOf(e).quality === "good").length / all.length) * 100)} %` : "—"} />
-        <Tile label="Acierto de sesión" value={judged.length ? `${Math.round((judged.filter((x) => x.v.hit).length / judged.length) * 100)} %` : "—"} sub="no es una evaluación guardada" />
-        <Tile label="Incorrectas aceptadas" value={String(wrongTrusted)} sub="good + fallo frente a referencia" />
-        <Tile label="Confianza media" value={confidence !== null ? `${Math.round(confidence * 100)} %` : "—"} sub="declarada por el modelo" />
+        <Tile label="Acierto de sesión" value={judged.length ? `${Math.round((judged.filter((x) => x.v.hit).length / judged.length) * 100)} %` : "—"} />
+        <Tile label="Incorrectas aceptadas" value={String(wrongTrusted)} />
+        <Tile label="Confianza media" value={confidence !== null ? `${Math.round(confidence * 100)} %` : "—"} />
         <Tile label="Latencia media" value={latency !== null ? `${dec(latency, 0)} ms` : "—"} />
       </div>
 
@@ -254,8 +299,8 @@ export function VisionPage() {
                   <img src={`/api/fotos/${candidate}`} alt="" loading="lazy" />
                   <span className="catalog-case-body">
                     <b>{item.condicion}</b>
-                    <span>Referencia: {item.valor || "ilegible"}{item.valor && cfg?.expect ? ` ${cfg.expect.unit}` : ""}</span>
-                    <span className="muted">{isReal(candidate, live) ? "Fotografía real" : "Generada"}{analyzed ? " · con ejecución" : ""}</span>
+                    <span>{item.valor || "ilegible"}{item.valor && cfg?.expect ? ` ${cfg.expect.unit}` : ""}</span>
+                    <span className="muted">{isReal(candidate, live) ? "Real" : "Generada"}{analyzed ? " · analizada" : ""}</span>
                   </span>
                 </button>
               );
@@ -265,28 +310,21 @@ export function VisionPage() {
 
         {file && credit ? (
           <div className="selected-case">
-            <Card title={file} aside={entry ? <Badge tone={qualityTone(p.quality)}>{qualityLabel(p.quality)}</Badge> : <Badge tone="idle">Sin analizar</Badge>}>
-              <div className="case-metadata">
-                <span><b>{credit.poi}</b> · {pois[credit.poi]?.profile ?? "perfil no publicado"}</span>
-                <span>{credit.condicion} · {isReal(file, live) ? "fotografía real" : "imagen generada"}</span>
-                <span>Valor de referencia: <b>{credit.valor || "ilegible"}{credit.valor && cfg?.expect ? ` ${cfg.expect.unit}` : ""}</b></span>
-              </div>
+            <Card title={file} aside={entry ? <Badge tone={qualityTone(p.quality)}>{qualityLabel(p.quality)}</Badge> : null}>
               <InspectionImage entry={entry} file={file} url={`/api/fotos/${file}`} />
               <p className="muted small photo-credit">
                 {isReal(file, live) ? <><a href={credit.fuente} target="_blank" rel="noreferrer">{credit.autor}</a> · {credit.licencia}</> : `${credit.autor} · ${credit.licencia}`}
               </p>
               <div className="trial-actions">
-                <button className="btn primary" onClick={analyzeCatalog} disabled={isRunning(selectedTrial)}>Analizar esta imagen</button>
-                <Badge tone="idle">Ensayo: no modifica la planta</Badge>
+                <button className="btn primary" onClick={analyzeCatalog} disabled={isRunning(selectedTrial)}>Analizar</button>
               </div>
               <TrialStatus run={selectedTrial} status={status} />
             </Card>
 
-            <Card title="Resultado y validación" className="case-result">
+            <Card title="Resultado" className="case-result">
               {!entry ? (
                 <div className="empty-result">
-                  <h3>{selectedTrial ? "Ensayo en curso" : "Sin ejecución en esta sesión"}</h3>
-                  <p className="muted">{selectedTrial ? "El resultado quedará fijado aquí cuando termine; este ensayo no publica valores en el UNS de la planta." : "La referencia describe el dataset; no es una respuesta del modelo. Puedes ejecutar ahora un ensayo aislado o examinar una ejecución del robot."}</p>
+                  <p className="muted">{selectedTrial ? "Analizando…" : "Sin analizar"}</p>
                 </div>
               ) : <ResultDetails live={live} cfg={cfg} entry={entry} file={file} imageUrl={`/api/fotos/${file}`} />}
             </Card>
@@ -296,44 +334,8 @@ export function VisionPage() {
         ) : <Card title="Sin casos">No hay imágenes para este filtro.</Card>}
       </section>
 
-      {live.uploads && <Card title="Probar una imagen nueva" className="upload-card">
-        <p className="muted">
-          Sube la foto de un manómetro o de un extintor. La lee {String(config.trial_model ?? model)}; no cambia nada de la planta.
-          {live.trialsPerHour > 0 && ` Hasta ${live.trialsPerHour} análisis por hora.`}
-        </p>
-        {String(config.trial_provider ?? config.provider) === "gemini" && (
-          <p className="muted small">
-            La imagen se envía a Google (Gemini). En el plan gratuito, Google puede usarla para mejorar sus productos: no subas fotos con personas ni datos privados. Aquí no se guarda.
-          </p>
-        )}
-        <div className="upload-controls">
-          <input type="file" accept="image/jpeg,image/png" onChange={chooseUpload} />
-          <label>Punto de inspección
-            <select value={upload?.poi ?? current ?? ""} disabled={!upload} onChange={(e) => upload && setUpload({ ...upload, poi: e.target.value })}>
-              {ids.map((id) => <option key={id} value={id}>{id} · {pois[id]?.profile ?? ""}</option>)}
-            </select>
-          </label>
-          <button className="btn primary" disabled={!upload || isRunning(uploadTrial)} onClick={analyzeUpload}>Analizar imagen nueva</button>
-        </div>
-        {uploadError && <p className="result bad">{uploadError}</p>}
-        {upload && (
-          <div className="upload-result">
-            <div>
-              <InspectionImage entry={uploadTrial?.entry} file={upload.name} url={upload.dataUrl} />
-              <p className="muted small">{upload.name} · {upload.mime} · POI indicado: {upload.poi}</p>
-              <TrialStatus run={uploadTrial} status={status} />
-            </div>
-            {uploadTrial?.entry && (
-              <div>
-                <ResultDetails live={live} cfg={pois[upload.poi]} entry={uploadTrial.entry} file={upload.name} imageUrl={upload.dataUrl} />
-                <ExecutionDetails live={live} cfg={pois[upload.poi]} config={config} entry={uploadTrial.entry} />
-              </div>
-            )}
-          </div>
-        )}
-      </Card>}
 
-      <Card title="Analítica por punto · solo sesión actual">
+      <Card title="Analítica por punto">
         <table className="tags">
           <thead><tr><th>Punto</th><th>Perfil</th><th className="num">Inspecciones</th><th className="num">Fiables</th><th className="num">Dudosas</th><th className="num">Acierto</th><th className="num">Error medio</th><th className="num">Confianza</th><th className="num">Latencia</th></tr></thead>
           <tbody>
@@ -350,7 +352,7 @@ export function VisionPage() {
         </table>
       </Card>
 
-      <Card title="Últimas lecturas · selecciona una para examinarla">
+      <Card title="Últimas lecturas">
         <div className="strip">
           {verdicts.slice(-18).reverse().map(({ e, v }, index) => {
             const item = payloadOf(e);
@@ -359,7 +361,7 @@ export function VisionPage() {
                 <Photo entry={e} small />
                 <figcaption>
                   <b>{show(item.poi)}</b> {item.value === null ? "—" : show(item.value)}
-                  {v.truth !== null && <span className={v.hit ? "hit" : "miss"}> {v.hit ? "✓" : "✗"} real {v.truth}</span>}
+                  {v.truth !== null && <span className={v.hit ? "hit" : "miss"}> {v.hit ? "✓" : `✗ ${v.truth}`}</span>}
                   <br /><span className="muted">{clock(e.t)} · {qualityLabel(item.quality)}</span><br />
                   <button className="btn small" onClick={() => chooseEntry(e)}>Examinar</button>
                 </figcaption>
@@ -386,7 +388,6 @@ function TrialStatus({ run, status }: { run: TrialRun | null; status: ReturnType
   return (
     <div className={`trial-status ${tone}`} role="status">
       <Badge tone={tone}>{state}</Badge>
-      <span>Ensayo <code>{run.request}</code> · no modifica la planta</span>
       {message && <span className="bad">{message}</span>}
     </div>
   );
@@ -404,17 +405,14 @@ function ResultDetails({ live, cfg, entry, file, imageUrl }: { live: Live; cfg: 
         <Badge tone={qualityTone(p.quality)}>{qualityLabel(p.quality)}</Badge>
       </div>
       <p><b>{reasonLabel(p.status_reason)}</b> · {show(p.evidence || p.error)}</p>
-      {verdict.truth !== null && <p className={`truth ${verdict.hit ? "hit" : "miss"}`}>Referencia {verdict.truth} · {verdict.hit ? "coincide con la respuesta" : "la respuesta no coincide"}</p>}
-      {p.quality === "good" && verdict.hit === false && <p className="result bad">Lectura incorrecta aceptada como válida.</p>}
-      {checks.length ? checks.map((check) => <p key={String(check)} className="result warn">{show(check)}</p>) : <p className="result ok">Aceptada tras superar esquema, evidencia y comprobaciones del perfil.</p>}
+      {verdict.truth !== null && <p className={`truth ${verdict.hit ? "hit" : "miss"}`}>Referencia {verdict.truth} {verdict.hit ? "✓" : "✗"}</p>}
+      {p.quality === "good" && verdict.hit === false && <p className="result bad">Incorrecta aceptada</p>}
+      {checks.map((check) => <p key={String(check)} className="result warn">{show(check)}</p>)}
       <div className="case-facts">
-        <span>ID <code>{show(p.inspection_id)}</code></span>
-        <span>Captura <b>{dateTime(p.captured_at)}</b></span>
-        <span>Procesamiento <b>{dateTime(p.processed_at ?? p.ts)}</b></span>
-        <span>Espera en cola <b>{typeof p.queue_wait_ms === "number" ? `${dec(p.queue_wait_ms, 0)} ms` : "—"}</b></span>
+        <span>Confianza <b>{typeof p.confidence === "number" ? `${dec(p.confidence * 100, 0)} %` : "—"}</b></span>
+        <span>Hora <b>{dateTime(p.processed_at ?? p.ts)}</b></span>
       </div>
       <div className="actions evidence-actions">
-        <span className="muted small">Descargar evidencia:</span>
         <a className="btn small" href={imageUrl} download={file}>Imagen</a>
         <button className="btn small" onClick={() => downloadJson(entry, file)}>JSON</button>
       </div>
@@ -429,19 +427,17 @@ function ExecutionDetails({ live, cfg, config, entry }: { live: Live; cfg: PoiCo
   const uns = cfg ? payloadOf(live.get(cfg.uns_topic)) : {};
   const associatedValue = p.mode !== "ensayo" && p.inspection_id !== undefined && uns.inspection_id === p.inspection_id ? uns : null;
   return (
-    <Card title="Modelo y ejecución" className="execution-card">
+    <Card title="Ejecución" className="execution-card">
       <div className="execution-facts">
         <span>Modelo <b>{show(trace.model ?? config.model)}</b></span>
         <span>Proveedor <b>{show(trace.provider ?? config.provider)}</b></span>
-        <span>Inferencia <b>{typeof trace.latency_ms === "number" ? `${dec(trace.latency_ms, 0)} ms` : "—"}</b></span>
-        <span>Temperatura <b>{show(trace.temperature ?? config.temperature)}</b></span>
+        <span>Latencia <b>{typeof trace.latency_ms === "number" ? `${dec(trace.latency_ms, 0)} ms` : "—"}</b></span>
         <span>Prompt <code>{show(trace.prompt ?? config.value)}</code></span>
-        <span>SHA-256 imagen <code className="hash">{show(trace.image_sha256)}</code></span>
       </div>
-      <details><summary>Prompt utilizado y esquema JSON</summary><pre className="code">{show(trace.instruction ?? cfg?.prompt)}</pre><pre className="code">{JSON.stringify(trace.schema ?? cfg?.schema ?? {}, null, 2)}</pre></details>
-      <details><summary>Respuesta JSON del modelo</summary><pre className="code">{raw ?? "No hay respuesta: la ejecución terminó antes de inferencia."}</pre></details>
-      <details><summary>Mensaje de valor asociado en el UNS</summary><pre className="code">{associatedValue ? JSON.stringify(associatedValue, null, 2) : p.mode === "ensayo" ? "Ensayo aislado: no publica ningún valor en el UNS de la planta." : "No hay un valor asociado a este ID: fue descartado, caducó o el UNS ya contiene una inspección posterior."}</pre></details>
-      <details><summary>Inspección completa</summary><pre className="code">{JSON.stringify(entry.payload, null, 2)}</pre></details>
+      <details><summary>Prompt y esquema</summary><pre className="code">{show(trace.instruction ?? cfg?.prompt)}</pre><pre className="code">{JSON.stringify(trace.schema ?? cfg?.schema ?? {}, null, 2)}</pre></details>
+      <details><summary>Respuesta del modelo</summary><pre className="code">{raw ?? "—"}</pre></details>
+      {p.mode !== "ensayo" && <details><summary>Valor en el UNS</summary><pre className="code">{associatedValue ? JSON.stringify(associatedValue, null, 2) : "—"}</pre></details>}
+      <details><summary>JSON completo</summary><pre className="code">{JSON.stringify(entry.payload, null, 2)}</pre></details>
     </Card>
   );
 }
